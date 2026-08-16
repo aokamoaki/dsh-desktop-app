@@ -216,9 +216,18 @@
   });
   $('chkUpdate').addEventListener('click', () => { window.dsh.checkUpdate(); });
   $('dlUpdate').addEventListener('click', () => {
+    // Immediate feedback: disable + label change so the click never feels dead,
+    // even before the async status stream arrives (or if the download fails fast).
+    const btn = $('dlUpdate');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = U.downloading;
+    umsg.textContent = U.downloading;
+    umsg.className = 'msg';
     window.dsh.downloadUpdate().then((r) => {
       if (r && r.ok) { umsg.textContent = U.ready; umsg.className = 'msg ok'; window.dsh.installUpdate(); setTimeout(() => { umsg.textContent = U.installStarted; }, 600); }
       else { umsg.textContent = (r && r.error) || U.failed; umsg.className = 'msg err'; }
-    });
+    }).catch((e) => { umsg.textContent = (e && e.message) || U.failed; umsg.className = 'msg err'; })
+      .finally(() => { btn.disabled = false; btn.textContent = orig; });
   });
 })();
