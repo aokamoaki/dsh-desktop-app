@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "author": "aokamoaki",
+  "license": "MIT",
   "description": "DeepSeek Harness desktop client - native window + tray shell for dsh web, with curated first-run plugins",
   "main": "main.js",
   "scripts": {

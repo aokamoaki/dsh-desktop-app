@@ -8,18 +8,12 @@ A native desktop client (Electron shell) that wraps `dsh web` in a frameless win
 
 ## ✨ Features
 
-- 🪟 **Native window**: frameless with a custom titlebar; an isolated `WebContentsView` loads `dsh web` (sandboxed, external links open in the system browser)
-- 🗂️ **System tray**: open / Dashboard / start or restart service / quit; clicking × hides to the tray
-- 🔄 **Service lifecycle**: attaches an already-running instance (no double-write to `~/.dsh`), port fallback, crash restart with exponential backoff + self-heal notification
-- 🛡️ **Pre-boot guard**: runs the [dsh-startup-guard](https://github.com/aokamoaki/dsh-startup-guard) core before spawning dsh, results shown on screen (splash / Dashboard)
+- 🪟 **Native desktop experience**: frameless window with a custom titlebar; an isolated `WebContentsView` loads `dsh web` (sandboxed); system tray + global `Ctrl+Alt+H` to summon it anytime, clicking × hides to the tray
+- 🛡️ **Rock-solid**: runs the [dsh-startup-guard](https://github.com/aokamoaki/dsh-startup-guard) check before spawning; attaches an already-running instance (no double-write to `~/.dsh`); crash restart with exponential backoff + notification
+- 📊 **All-in-one Dashboard**: service status / startup check / dsh version update·rollback / app updates / auto-start toggle / one-click diagnostic export
 - 🔔 **Notification loop**: `dsh-notify://` protocol raises the window; conversation notifications are background-only (ask/approval always fire)
-- 📊 **Dashboard**: service status / startup check / dsh version lock·update·rollback / app updates / auto-start toggle / one-click diagnostic export
 - 🚀 **Self-update**: baked-in manifest URL, background check on start (`settings.json` can override updateUrl)
-- 🎨 **Bilingual, follows the main program**; Dashboard visuals share the main UI's real design tokens
-- 📦 **Curated first-run plugins (once only)**; fully missing-safe
-- ⌨️ **Shortcuts** + global `Ctrl+Alt+H`; logs at `%APPDATA%\dsh-desktop-app\logs\desktop.log`
-
-> Data fully reuses `%USERPROFILE%\.dsh` — zero migration for existing plugins, credentials, and sessions.
+- 📦 **Ready to use**: curated plugins installed once on first run (missing-safe); bilingual, follows the main program, fully reuses `%USERPROFILE%\.dsh` — zero migration for existing plugins, credentials, and sessions
 
 ## 🚀 Usage
 
@@ -37,14 +31,14 @@ npm run dist           # build (NSIS installer + portable)
 main.js / preload.js / lib/core.js (pure logic, unit-testable) / ui/ / notifier/ / curated.json / guard-runner.mjs
 ```
 
-Tests: `npm test` (`lib/core` unit tests); UI self-check: `electron.cmd preview.js` offscreen screenshots; build verification: `dist\win-unpacked\dsh-desktop-app.exe --smoke`.
+Tests: `npm test` (`lib/core` unit tests); UI self-check: `npx electron preview.js` offscreen screenshots; build verification: `dist\win-unpacked\dsh-desktop-app.exe --smoke`.
 
 ## 📦 Release
 
 ```bash
 npm run provision:npm && npm run dist   # 1. build the installer
-node make-release.mjs --repo=aokamoaki/dsh-desktop-app --version x.y.z  # 2. generate release manifests (dsh-update.json + update-url.json)
-gh release create vx.y.z dist-v2\DeepSeek-Harness-Setup-x.y.z.exe dsh-update.json  # 3. upload Release
+node make-release.mjs --repo=aokamoaki/dsh-desktop-app --version=x.y.z  # 2. generate release manifests (dsh-update.json + update-url.json; omit --version= to read package.json)
+gh release create vx.y.z dist\DeepSeek-Harness-Setup-x.y.z.exe dsh-update.json  # 3. upload Release
 npm run dist                            # 4. rebuild (bakes the update URL into the app) → distribute
 ```
 
