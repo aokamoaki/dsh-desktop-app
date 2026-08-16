@@ -2,6 +2,11 @@
 
 本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
 
+## [1.0.2] - 2026-08-16
+
+- 修复：自更新下载自动使用代理（`https_proxy`/`http_proxy`/`DSH_UPDATE_PROXY`）—— 直连 GitHub 超时导致「下载并安装」失效；超时提到 900s
+- 修复：「下载并安装」按钮点击即时反馈（禁用 + 「正在下载...」标签 + 消息），不再无响应感
+
 ## [1.0.1] - 2026-08-16
 
 - 精选插件清单加入 **dsh-notify**（通知/前台状态），首启安装一次
