@@ -1,0 +1,27 @@
+/* dsh-desktop-app UI polish - injected into the dsh web page after load.
+ * 1. Subtle open animation for popup menus (the dsh Menu component mounts
+ *    with no animation).
+ * 2. Chevron rotation on open for ALL dropdown triggers, matching the model
+ *    selector (Sh0Q9G: transition transform .12s + rotate(180deg)) - the
+ *    workspace and agent-preset selectors were missing this animation.
+ * Respects reduced-motion. Desktop window only; the web page is untouched.
+ */
+[role="menu"] {
+  animation: dsh-menu-in 0.14s ease-out;
+  transform-origin: top left;
+}
+@keyframes dsh-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+/* Chevron rotation, same as the model selector's Sh0Q9G_chevronOpen */
+[class$="_chevron"] {
+  transition: transform 0.12s;
+}
+button[aria-haspopup="menu"][aria-expanded="true"] [class$="_chevron"] {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  [role="menu"] { animation: none; }
+  [class$="_chevron"] { transition: none; }
+}

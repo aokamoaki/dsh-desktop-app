@@ -1,0 +1,65 @@
+{
+  "name": "dsh-desktop-app",
+  "version": "1.0.0",
+  "private": true,
+  "author": "aokamoaki",
+  "description": "DeepSeek Harness desktop client - native window + tray shell for dsh web, with curated first-run plugins",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "test": "node --test test/core.test.js",
+    "provision:npm": "npm install --prefix resources/npm npm@11 --no-audit --no-fund",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "asar": true,
+    "npmRebuild": false,
+    "appId": "com.dsh.desktop",
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "main.js",
+      "preload.js",
+      "curated.json",
+      "guard-runner.mjs",
+      "lib/**",
+      "assets/**",
+      "notifier/**",
+      "ui/**",
+      "package.json",
+      "update-url.json"
+    ],
+    "asarUnpack": [
+      "notifier/**",
+      "guard-runner.mjs"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/npm",
+        "to": "npm"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "DeepSeek Harness",
+      "artifactName": "DeepSeek-Harness-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "DeepSeek-Harness-Portable-${version}.${ext}"
+    }
+  }
+}
+

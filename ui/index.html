@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DeepSeek Harness</title>
+<style>
+  :root {
+    --brand: #4d6bfe;
+    --brand-2: #7c5cff;
+    --ok: #34c759;
+    --warn: #e5a50a;
+    --bad: #e5484d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --card-bg: rgba(30, 34, 41, .72);
+      --card-fg: #e8eaf0;
+      --muted: #9aa3b2;
+      --line: rgba(255, 255, 255, .09);
+      --hover: rgba(128, 140, 170, .16);
+      --shadow: 0 16px 48px rgba(0, 0, 0, .5);
+      --backdrop: rgba(12, 14, 20, .35);
+    }
+  }
+  :root {
+    --card-bg: rgba(255, 255, 255, .78);
+    --card-fg: #1f2328;
+    --muted: #6b7280;
+    --line: rgba(20, 30, 60, .09);
+    --hover: rgba(128, 140, 170, .10);
+    --shadow: 0 16px 48px rgba(30, 40, 90, .18);
+    --backdrop: rgba(240, 243, 250, .4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
+  body {
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-app-region: drag; user-select: none;
+  }
+  .stage {
+    width: 360px;
+    background: linear-gradient(160deg, var(--backdrop), transparent 42%),
+      var(--card-bg);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: 26px 24px 22px;
+    text-align: center;
+    color: var(--card-fg);
+    animation: pop .28s cubic-bezier(.2, .9, .3, 1.2);
+  }
+  @keyframes pop { from { opacity: 0; transform: scale(.94) translateY(6px); } }
+  .logo-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px; }
+  .logo-badge {
+    width: 42px; height: 42px; border-radius: 13px;
+    background: linear-gradient(135deg, var(--brand), var(--brand-2));
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 18px rgba(77, 107, 254, .38);
+  }
+  .logo-badge img { width: 26px; height: 26px; filter: brightness(0) invert(1); }
+  .logo { font-size: 17px; font-weight: 700; letter-spacing: .2px; }
+  .logo span { background: linear-gradient(90deg, var(--brand), var(--brand-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .phase { font-size: 12.5px; color: var(--muted); min-height: 17px; margin-bottom: 12px; }
+  /* gradient ring spinner */
+  .spinner {
+    width: 30px; height: 30px; margin: 2px auto 12px;
+    border-radius: 50%;
+    border: 3px solid var(--line);
+    border-top-color: var(--brand);
+    border-right-color: var(--brand-2);
+    animation: spin .85s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* boot stage indicator */
+  .steps { display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 12px; }
+  .steps .step {
+    height: 3px; width: 34px; border-radius: 2px;
+    background: var(--line);
+    transition: background .3s ease;
+  }
+  .steps .step.on { background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
+  .err { display: none; color: var(--bad); font-size: 12.5px; margin-bottom: 10px; line-height: 1.5; }
+  .err.show { display: block; }
+  .buttons { display: none; gap: 8px; justify-content: center; -webkit-app-region: no-drag; margin-top: 2px; }
+  .buttons.show { display: flex; }
+  button {
+    border: 1px solid var(--line); background: transparent; color: var(--card-fg);
+    padding: 7px 16px; border-radius: 9px; font-size: 12px; cursor: pointer;
+    font-family: inherit;
+    transition: background .12s ease, border-color .12s ease, transform .06s ease;
+  }
+  button:hover { background: var(--hover); border-color: var(--brand); }
+  button:active { transform: scale(.97); }
+  button.primary {
+    background: linear-gradient(135deg, var(--brand), var(--brand-2));
+    border-color: transparent; color: #fff;
+    box-shadow: 0 4px 14px rgba(77, 107, 254, .35);
+  }
+  button.primary:hover { filter: brightness(1.08); background: linear-gradient(135deg, var(--brand), var(--brand-2)); }
+  .guard { display: none; margin-top: 12px; text-align: left; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+  .guard.show { display: block; }
+  .guard div { margin: 3px 0; display: flex; align-items: center; gap: 6px; }
+  .guard .ok { color: var(--ok); }
+  .guard .warn { color: var(--warn); }
+  .guard .bad { color: var(--bad); }
+  .guard .ic { font-size: 11px; }
+  .curated { display: none; margin-top: 12px; text-align: left; font-size: 11.5px; color: var(--muted); }
+  .curated.show { display: block; }
+  .curated .bar { height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 7px; }
+  .curated .fill {
+    height: 100%; width: 0; border-radius: 3px;
+    background: linear-gradient(90deg, var(--brand), var(--brand-2));
+    transition: width .3s ease;
+  }
+  .logbox { display: none; margin-top: 12px; text-align: left; -webkit-app-region: no-drag; }
+  .logbox.show { display: block; }
+  pre {
+    max-height: 110px; overflow: auto; font-size: 10px; line-height: 1.5;
+    background: rgba(0, 0, 0, .22); border: 1px solid var(--line); border-radius: 9px;
+    padding: 9px 11px; color: var(--muted);
+    font-family: Consolas, "Cascadia Mono", monospace;
+    white-space: pre-wrap; word-break: break-all;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="logo-row">
+      <div class="logo-badge"><img src="../assets/icon.png" alt=""></div>
+      <div class="logo">DeepSeek <span>Harness</span></div>
+    </div>
+    <div class="phase" id="phase">starting...</div>
+    <div class="steps" id="steps">
+      <div class="step on" id="step0"></div>
+      <div class="step" id="step1"></div>
+      <div class="step" id="step2"></div>
+      <div class="step" id="step3"></div>
+    </div>
+    <div class="spinner" id="spinner"></div>
+    <div class="err" id="err"></div>
+    <div class="guard" id="guard"></div>
+    <div class="curated" id="curated">
+      <div id="curtext">Installing curated plugins...</div>
+      <div class="bar"><div class="fill" id="curfill"></div></div>
+    </div>
+    <div class="buttons" id="btns">
+      <button id="retry" class="primary">Retry</button>
+      <button id="browser">Open in Browser</button>
+      <button id="logs">Logs</button>
+    </div>
+    <div class="logbox" id="logbox"><pre id="logpre"></pre></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

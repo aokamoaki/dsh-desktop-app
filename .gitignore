@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-v2/
+resources/npm/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+# release-generated artifacts (make-release.mjs); regenerate per release
+dsh-update.json
+update-url.json
