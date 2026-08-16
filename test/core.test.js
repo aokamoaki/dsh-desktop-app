@@ -142,18 +142,18 @@ describe('resolveDshBin', () => {
 
 describe('externalPath', () => {
   test('maps app.asar paths to app.asar.unpacked', () => {
-    const p = 'C:\\apps\\resources\\app.asar\\notifier\\notify.ps1';
-    assert.equal(
-      core.externalPath(p, 'C:\\apps\\resources'),
-      'C:\\apps\\resources\\app.asar.unpacked\\notifier\\notify.ps1');
+    const sep = path.sep;
+    const p = ['C:', 'apps', 'resources', 'app.asar', 'notifier', 'notify.ps1'].join(sep);
+    const expected = ['C:', 'apps', 'resources', 'app.asar.unpacked', 'notifier', 'notify.ps1'].join(sep);
+    assert.equal(core.externalPath(p, ['C:', 'apps', 'resources'].join(sep)), expected);
   });
   test('passes through non-asar paths (dev mode)', () => {
-    const p = 'C:\\proj\\dsh-desktop-app\\notifier\\notify.ps1';
-    assert.equal(core.externalPath(p, 'C:\\proj\\dsh-desktop-app'), p);
+    const p = path.join('C:', 'proj', 'dsh-desktop-app', 'notifier', 'notify.ps1');
+    assert.equal(core.externalPath(p, path.join('C:', 'proj', 'dsh-desktop-app')), p);
     assert.equal(core.externalPath(p, ''), p);
   });
   test('passes through when resourcesPath is empty (plain node)', () => {
-    const p = 'C:\\apps\\resources\\app.asar\\guard-runner.mjs';
+    const p = path.join('C:', 'apps', 'resources', 'app.asar', 'guard-runner.mjs');
     assert.equal(core.externalPath(p, ''), p);
   });
 });
