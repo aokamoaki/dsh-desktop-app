@@ -1156,7 +1156,15 @@ function downloadUpdate() {
   updateState = { ...u, downloading: true, error: null };
   broadcastStatus();
   return new Promise((resolve) => {
-    const proc = spawn('curl.exe', ['-sS', '-L', '--max-time', '600', '-o', target, u.url], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const args = ['-sS', '-L', '--max-time', '900', '-o', target];
+    // Direct GitHub downloads frequently fail behind CN network routes; pick
+    // up a usable proxy from env vars or the common local port so the
+    // installer download actually completes.
+    const proxy = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY || '';
+    const useProxy = proxy || (process.env.DSH_UPDATE_PROXY || '');
+    if (useProxy) args.push('-x', useProxy);
+    args.push(u.url);
+    const proc = spawn('curl.exe', args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let err = '';
     proc.stderr.on('data', (d) => { err += d; });
     proc.on('error', (e) => {
