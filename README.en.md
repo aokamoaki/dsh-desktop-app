@@ -46,7 +46,7 @@ npm run dist                            # 4. rebuild (bakes the update URL into 
 
 ## 🔌 Relationship with plugins
 
-The shell itself depends on **no curated plugin** — every integration point is missing-safe: uninstalling `dsh-startup-guard` (startup check) or `dsh-notify` (notifications / foreground) leaves the client fully functional. Curated list (`curated.json`, first-run only): dshmarket, dsh-token-usage, @anionex/dsh-vision-toolkit, dsh-file-upload, dsh-startup-guard, dsh-notify. Companion plugin **dsh-desktop-launch** provides a `desktop_launch` tool to raise the desktop client from chat.
+The shell itself depends on **no curated plugin** — every integration point is missing-safe: uninstalling `dsh-startup-guard` (startup check) or `dsh-notify` (notifications / foreground) leaves the client fully functional. Curated list (`curated.json`, first-run only): dshmarket, dsh-token-usage, @anionex/dsh-vision-toolkit, dsh-file-upload, dsh-startup-guard, dsh-notify, dsh-chat-timeline. Companion plugin **dsh-desktop-launch** provides a `desktop_launch` tool to raise the desktop client from chat.
 
 ## 📄 License
 
