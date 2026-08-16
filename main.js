@@ -198,9 +198,14 @@ function readNotifyConfig() {
  * True while ANY app window (main / dashboard / splash / standalone) holds
  * focus - the correct "user is watching" signal. The old mainWindow-only
  * check misjudged the dashboard-focused state as background.
+ * A minimized or hidden window is NOT "watching": on Windows a minimized
+ * window can still report isFocused() true, so require both visible and
+ * not-minimized.
  */
 function anyWindowFocused() {
-  try { return BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused()); }
+  try {
+    return BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isVisible() && !w.isMinimized() && w.isFocused());
+  }
   catch { return false; }
 }
 /**
@@ -227,6 +232,13 @@ function installFocusReporting() {
   const rereport = () => setTimeout(reportShellFocus, 0);
   app.on('browser-window-focus', rereport);
   app.on('browser-window-blur', rereport);
+  // Minimize / restore / show do NOT emit browser-window-focus/blur, so the
+  // shell state would stay stuck at the last focused value: a minimized app
+  // would keep reporting foreground=true and swallow completion
+  // notifications. Re-report on every visibility transition.
+  app.on('browser-window-minimize', rereport);
+  app.on('browser-window-restore', rereport);
+  app.on('browser-window-show', rereport);
 }
 function notifyService(title, detail, always = false) {
   if (SMOKE || DEMO) return;
@@ -753,6 +765,9 @@ function hideToTray() {
   let o = 1;
   const step = () => { o -= 0.2; mainWindow.setOpacity(Math.max(0, o)); if (o > 0) setTimeout(step, 16); else mainWindow.hide(); };
   step();
+  // hide() has no browser-window-hide event; report the transition so the
+  // notify host stops suppressing completion notifications immediately.
+  reportShellFocus();
 }
 /** Global hotkey Ctrl+Alt+H (WeChat/QQ style): toggle the main window. */
 function toggleMainFromGlobal() {
