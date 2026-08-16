@@ -2,6 +2,11 @@
 
 本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
 
+## [1.0.1] - 2026-08-16
+
+- 精选插件清单加入 **dsh-notify**（通知/前台状态），首启安装一次
+- 修复：壳前台上报覆盖最小化/隐藏/恢复（`browser-window-minimize/restore/show` + `hideToTray` 重报，`anyWindowFocused` 排除不可见窗口）—— 最小化后不再吞掉"完成"通知
+
 ## [1.0.0] - 2026-08-16
 
 **首次公开发布**。桌面壳达到正式发布标准：原生窗口 + 托盘、服务生命周期管理、启动前守卫、通知闭环、自更新、仪表盘、双语，S0–S4 路线图全部落地。

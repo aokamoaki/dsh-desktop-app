@@ -1,11 +1,12 @@
 {
-  "version": 5,
-  "note": "Curated first-run plugin list. Phase 1 installs the bootstrap entry (dshmarket) directly before the server boots; phase 2 installs the rest through the market's own install API (url = curated-registry entry URL; versions follow the market: npm latest / GitHub HEAD). If the market API is unreachable or lacks an entry, that entry falls back to a direct `dsh plugin add` using spec. After provisioning they are ordinary plugins managed by dshmarket. dsh-startup-guard is included since 1.0.0: it is npm-published (dsh-startup-guard@1.0.0) so every user gets the boot-time guard (session repair, composition preflight, crash quarantine).",
+  "version": 6,
+  "note": "Curated first-run plugin list. Phase 1 installs the bootstrap entry (dshmarket) directly before the server boots; phase 2 installs the rest through the market's own install API (url = curated-registry entry URL; versions follow the market: npm latest / GitHub HEAD). If the market API is unreachable or lacks an entry, that entry falls back to a direct `dsh plugin add` using spec. After provisioning they are ordinary plugins managed by dshmarket. dsh-startup-guard is included since 1.0.0: it is npm-published (dsh-startup-guard@1.0.0) so every user gets the boot-time guard (session repair, composition preflight, crash quarantine). dsh-notify is included since 1.0.1: GitHub-only install, gives every user the completion/ask notifications with desktop-app integration (foreground suppression, dsh-notify:// deep link).",
   "plugins": [
     { "name": "dshmarket", "url": "https://github.com/dsh-market/dsh-market", "spec": "dshmarket@1.4.1", "bootstrap": true, "reason": "plugin ecosystem entry; must exist before the server boots" },
     { "name": "dsh-token-usage", "url": "https://github.com/LaoYueHanNi/dsh-token-usage", "spec": "github:LaoYueHanNi/dsh-token-usage", "reason": "token/cost tracking" },
     { "name": "@anionex/dsh-vision-toolkit", "url": "https://github.com/Anionex/dsh-vision-toolkit", "spec": "@anionex/dsh-vision-toolkit@0.1.7", "reason": "native vision engineering tools" },
     { "name": "dsh-file-upload", "url": "https://github.com/HongMing-Huang/dsh-file-upload", "spec": "dsh-file-upload@0.3.0", "reason": "drag-and-drop file upload" },
-    { "name": "dsh-startup-guard", "url": "https://github.com/aokamoaki/dsh-startup-guard", "spec": "dsh-startup-guard@1.0.0", "reason": "boot-time guard: session repair, composition preflight, crash quarantine" }
+    { "name": "dsh-startup-guard", "url": "https://github.com/aokamoaki/dsh-startup-guard", "spec": "dsh-startup-guard@1.0.0", "reason": "boot-time guard: session repair, composition preflight, crash quarantine" },
+    { "name": "dsh-notify", "url": "https://github.com/aokamoaki/dsh-notify", "spec": "github:aokamoaki/dsh-notify", "reason": "completion/ask notifications with desktop-app deep link (foreground-aware)" }
   ]
 }

@@ -1285,6 +1285,7 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', (_e, argv) => {
+    log('second-instance argv:', JSON.stringify(argv));
     const url = (argv || []).find(a => a.startsWith(PROTOCOL + '://'));
     if (url) handleNotifyUrl(url);
     else showMain();
