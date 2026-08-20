@@ -171,6 +171,28 @@ describe('webAppSupportsNoOpen', () => {
   });
 });
 
+describe('isValidDshVersion', () => {
+  test('accepts plain semver', () => {
+    assert.equal(core.isValidDshVersion('0.1.0'), true);
+    assert.equal(core.isValidDshVersion('1.2.3'), true);
+  });
+  test('accepts prerelease tags (dsh ships only -rc.x versions)', () => {
+    assert.equal(core.isValidDshVersion('0.1.0-rc.8'), true);
+    assert.equal(core.isValidDshVersion('0.0.1-rc.1'), true);
+    assert.equal(core.isValidDshVersion('0.1.0-rc.2-beta.1'), true);
+  });
+  test('rejects non-versions and malformed shapes', () => {
+    assert.equal(core.isValidDshVersion(''), false);
+    assert.equal(core.isValidDshVersion(null), false);
+    assert.equal(core.isValidDshVersion(undefined), false);
+    assert.equal(core.isValidDshVersion(1.0), false);
+    assert.equal(core.isValidDshVersion('v0.1.0'), false);
+    assert.equal(core.isValidDshVersion('0.1'), false);
+    assert.equal(core.isValidDshVersion('latest'), false);
+    assert.equal(core.isValidDshVersion('0.1.0/../x'), false);
+  });
+});
+
 describe('externalPath', () => {
   test('maps app.asar paths to app.asar.unpacked', () => {
     const sep = path.sep;

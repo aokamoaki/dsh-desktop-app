@@ -376,7 +376,7 @@ async function updateDsh(ver) {
   // Defense in depth: only a strict semver string (optionally with a
   // prerelease suffix like -rc.6) may reach the install command, whatever
   // the caller (IPC or future UI) passes in.
-  if (typeof ver !== 'string' || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(ver)) {
+  if (!core.isValidDshVersion(ver)) {
     log('dsh version change rejected (invalid version):', ver);
     return false;
   }
@@ -1268,7 +1268,11 @@ function registerIpc() {
   ipcMain.handle('dsh:versions', (e) => trustedSender(e) ? listDshVersions() : null);
   ipcMain.handle('dsh:update', (e, ver) => {
     if (!trustedSender(e)) return null;
-    if (typeof ver !== 'string' || !/^\d+\.\d+\.\d+$/.test(ver)) return false;
+    // dsh ships ONLY prerelease tags (0.1.0-rc.x), so the gate must accept the
+    // same semver shape updateDsh validates internally (shared core helper);
+    // the stricter /^\d+\.\d+\.\d+$/ rejected every version the dashboard
+    // could select, silently breaking update/rollback.
+    if (!core.isValidDshVersion(ver)) return false;
     return updateDsh(ver);
   });
   ipcMain.handle('app:autoLaunch', (e, on) => {
