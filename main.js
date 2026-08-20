@@ -420,6 +420,13 @@ function spawnServer(port) {
   const env = { ...process.env, DSH_HOME };
   if (node.electronAsNode) env.ELECTRON_RUN_AS_NODE = '1';
   const args = [bin, '--profile', 'web', '--host', '127.0.0.1', '--port', String(port)];
+  // Newer dsh runtimes hand off to the default browser on `dsh web` unless
+  // --no-open is passed. The shell renders the UI in its own embedded view,
+  // so the external browser must stay closed; the tray/menu "Open in
+  // Browser" item remains the explicit escape hatch. Older runtimes reject
+  // the unknown option, so only pass it when the installed runtime supports
+  // it (probed from the resolved dsh-web-app package).
+  if (core.webAppSupportsNoOpen(DSH_HOME)) args.push('--no-open');
   log('spawn:', node.exe, args.join(' '));
   const proc = spawn(node.exe, args, {
     cwd: PROFILE_DIR, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],

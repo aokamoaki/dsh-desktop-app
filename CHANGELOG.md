@@ -2,6 +2,11 @@
 
 本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
 
+## [1.0.3] - 2026-08-20
+
+- 修复：新版 dsh 运行时（`dsh --profile web`）启动时会自动调用默认浏览器打开网页，导致桌面客户端每次启动都弹浏览器。现在壳内嵌视图渲染 UI，启动时不再弹出浏览器；托盘/菜单「浏览器打开」仍是显式出口
+- 兼容旧版 dsh：`--no-open` 仅在运行时支持时传入（探测已安装 `dsh-web-app` 的 startup.js），旧运行时不会被未知参数拒绝
+
 ## [1.0.2] - 2026-08-16
 
 - 精选插件清单加入 **dsh-chat-timeline**（DeepSeek 网页版右侧对话导航栏 1:1 移植）

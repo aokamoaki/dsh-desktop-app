@@ -140,6 +140,37 @@ describe('resolveDshBin', () => {
   });
 });
 
+describe('webAppSupportsNoOpen', () => {
+  function homeWith(startupBody) {
+    const home = tmpdir();
+    const bin = path.join(home, 'desktop-runtime', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+    fs.mkdirSync(path.dirname(bin), { recursive: true });
+    fs.writeFileSync(bin, '// fake bin');
+    const startup = path.join(home, 'desktop-runtime', 'node_modules', '@deepseek-ai', 'dsh-web-app', 'lib', 'startup.js');
+    if (startupBody !== null) {
+      fs.mkdirSync(path.dirname(startup), { recursive: true });
+      fs.writeFileSync(startup, startupBody);
+    }
+    return home;
+  }
+  test('true when the runtime web app declares --no-open (newer dsh)', () => {
+    const home = homeWith('.option("--no-open", "do not open the Web UI in the default browser")');
+    try { assert.equal(core.webAppSupportsNoOpen(home), true); } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+  test('false when the web app predates --no-open', () => {
+    const home = homeWith('.option("--port <port>", "listen port")');
+    try { assert.equal(core.webAppSupportsNoOpen(home), false); } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+  test('false when no web app is installed next to the bin', () => {
+    const home = homeWith(null);
+    try { assert.equal(core.webAppSupportsNoOpen(home), false); } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+  test('false when no dsh bin exists', () => {
+    const home = tmpdir();
+    try { assert.equal(core.webAppSupportsNoOpen(home), false); } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+});
+
 describe('externalPath', () => {
   test('maps app.asar paths to app.asar.unpacked', () => {
     const sep = path.sep;
