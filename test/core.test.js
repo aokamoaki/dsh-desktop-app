@@ -193,6 +193,33 @@ describe('isValidDshVersion', () => {
   });
 });
 
+describe('npmProgressLine', () => {
+  test('counts fetched tarballs from the http log', () => {
+    const acc = core.npmProgressLine('npm http fetch GET 200 https://registry.npmjs.org/x/-/x-1.0.0.tgz 123ms');
+    core.npmProgressLine('npm http fetch GET 200 https://registry.npmjs.org/y/-/y-2.0.0.tgz 45ms', acc);
+    assert.equal(acc.fetched, 2);
+    assert.equal(acc.phase, 'fetch');
+  });
+  test('ignores non-tgz http lines and metadata fetches', () => {
+    const acc = { fetched: 0 };
+    core.npmProgressLine('npm http fetch GET 200 https://registry.npmjs.org/@deepseek-ai/dsh 80ms', acc);
+    core.npmProgressLine('npm http fetch GET 304 https://registry.npmjs.org/x/-/x-1.0.0.tgz', acc);
+    assert.equal(acc.fetched, 0);
+  });
+  test('switches to reify on reify lines, done on added packages', () => {
+    const acc = { fetched: 0 };
+    core.npmProgressLine('reify:foo: timing reifyNode:node_modules/foo Completed in 10ms', acc);
+    assert.equal(acc.phase, 'reify');
+    core.npmProgressLine('added 512 packages, and audited 513 packages in 42s', acc);
+    assert.equal(acc.phase, 'done');
+  });
+  test('switches to error on npm error lines', () => {
+    const acc = { fetched: 0 };
+    core.npmProgressLine('npm error code ETARGET', acc);
+    assert.equal(acc.phase, 'error');
+  });
+});
+
 describe('externalPath', () => {
   test('maps app.asar paths to app.asar.unpacked', () => {
     const sep = path.sep;

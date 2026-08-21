@@ -2,6 +2,10 @@
 
 本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
 
+## [1.0.5] - 2026-08-22
+
+- 新增：仪表盘「更新 / 回滚 dsh」实时进度条——安装时以 `--loglevel=http` 运行 npm，逐行解析输出（已下载包数 / reify / 完成 / 错误），经状态通道 150ms 节流推送，进度条在下载阶段流动动画、安装阶段定格 85%、成功 100%、失败归零
+
 ## [1.0.4] - 2026-08-21
 
 - 修复：仪表盘「更新 / 回滚」再次失败——客户端自带 npm 被打包时被 electron-builder 默认过滤器（`!**/node_modules/**`）剥掉了 `node_modules`，npm 一启动就报 `MODULE_NOT_FOUND: graceful-fs`（退出码 7），更新/回滚在真正下载前就失败。`extraResources` 的 `resources/npm` 拷贝现在显式包含全部文件（filter: **/*），自带 npm 恢复完整依赖

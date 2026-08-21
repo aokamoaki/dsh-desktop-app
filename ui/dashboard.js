@@ -24,7 +24,7 @@
     dashboard: '仪表盘', service: '服务', status: '状态', addr: '地址', restart: '重启服务', start: '启动服务', browser: '浏览器打开',
     logs: '日志目录', autoLaunch: '登录时启动', diag: '导出诊断', guard: '启动体检', dshVer: 'dsh 版本',
     cur: '当前', latest: '最新', update: '更新 / 回滚', rollback: '回滚目标', appVer: '桌面应用', version: '版本', checkUpdate: '检查更新',
-    dlInstall: '下载并安装', logsT: '日志', refresh: '刷新', installing: '正在安装', done: '完成', failed: '失败（见日志）',
+    dlInstall: '下载并安装', logsT: '日志', refresh: '刷新', installing: '正在安装', done: '完成', failed: '失败（见日志）', fetching: '正在下载',
     guardOk: '✓ 启动体检通过', guardAuto: '已自动禁用损坏插件', guardFixed: '自动修复', guardRolled: '已回滚配置',
     guardSkipped: '启动体检跳过', guardNone: '尚无体检记录', updateCheck: '正在检查更新...', updateNone: '已是最新版本',
     updateAvail: '发现新版本', downloading: '正在下载...', ready: '安装包已就绪', installStarted: '安装程序已启动',
@@ -34,7 +34,7 @@
     dashboard: 'Dashboard', service: 'Service', status: 'Status', addr: 'Address', restart: 'Restart', start: 'Start Server', browser: 'Open in Browser',
     logs: 'Logs Folder', autoLaunch: 'Launch at login', diag: 'Export Diagnostics', guard: 'Startup Guard', dshVer: 'dsh Version',
     cur: 'Current', latest: 'Latest', update: 'Update / Rollback', rollback: 'Rollback target', appVer: 'Desktop App', version: 'Version', checkUpdate: 'Check for Updates',
-    dlInstall: 'Download & Install', logsT: 'Logs', refresh: 'Refresh', installing: 'Installing', done: 'Done', failed: 'Failed (see logs)',
+    dlInstall: 'Download & Install', logsT: 'Logs', refresh: 'Refresh', installing: 'Installing', done: 'Done', failed: 'Failed (see logs)', fetching: 'Fetching',
     guardOk: '✓ Startup check passed', guardAuto: 'Auto-disabled broken plugin', guardFixed: 'Auto-repaired', guardRolled: 'Config rolled back',
     guardSkipped: 'Startup check skipped', guardNone: 'No check recorded yet', updateCheck: 'Checking for updates...', updateNone: 'You are up to date',
     updateAvail: 'Update available', downloading: 'Downloading...', ready: 'Installer ready', installStarted: 'Installer launched',
@@ -83,6 +83,35 @@
     renderRestartBtn(s);
     renderGuard(s && s.guard);
     renderUpdate(s && s.update);
+    renderDshInstall(s && s.dshInstall);
+  }
+
+  // dsh update/rollback progress bar: indeterminate shimmer while packages
+  // are fetched, determinate width once reify starts, full on success.
+  function renderDshInstall(p) {
+    const wrap = $('dshProg');
+    if (!wrap) return;
+    if (!p || !p.version) { wrap.style.display = 'none'; return; }
+    const bar = $('dshProgBar');
+    const txt = $('dshProgTxt');
+    wrap.style.display = 'block';
+    const phase = p.phase || 'fetch';
+    if (phase === 'done') {
+      wrap.classList.remove('indet');
+      bar.style.width = '100%';
+      txt.textContent = U.done + ' ' + p.version;
+    } else if (phase === 'error') {
+      wrap.classList.remove('indet');
+      bar.style.width = '0%';
+      txt.textContent = U.failed;
+    } else if (phase === 'reify') {
+      wrap.classList.remove('indet');
+      bar.style.width = '85%';
+      txt.textContent = `${U.installing} ${p.version} ...`;
+    } else {
+      wrap.classList.add('indet');
+      txt.textContent = `${U.fetching} ${p.version} ... (${p.fetched || 0})`;
+    }
   }
 
   // The restart control doubles as a start button while the service is down,
@@ -208,6 +237,8 @@
     if (!target) return;
     $('update').disabled = true;
     showMsg(`${U.installing} ${target} ...`, true);
+    // Show the progress bar immediately; live updates arrive via onStatus.
+    renderDshInstall({ phase: 'fetch', fetched: 0, version: target });
     window.dsh.updateDsh(target).then((ok) => {
       showMsg(ok ? `${U.done}. ${target}` : U.failed, ok);
       setTimeout(() => refreshVersions(true), 500);

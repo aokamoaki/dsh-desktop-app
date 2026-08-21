@@ -127,6 +127,7 @@ let settingsPath = null;
 let lastGuard = null;      // latest startup-guard result (shown in splash/dashboard)
 let curatedState = null;   // { active, index, total, current, results } for first-run progress
 let updateState = null;    // { checking, available, version, url, downloading, downloadedPath }
+let dshInstallProgress = null; // { phase, fetched, version } live dsh update/rollback progress
 
 // --- logging -------------------------------------------------
 function ensureLog() {
@@ -297,7 +298,7 @@ function runNpm(args) {
   const r = spawnSync(node.exe, [cli, ...args], { cwd: PROFILE_DIR, env, windowsHide: true, timeout: 600000 });
   return { status: r.status, out: (r.stdout || '').toString().trim(), err: (r.stderr || '').toString().trim() };
 }
-function runNpmAsync(args, timeoutMs = 600000) {
+function runNpmAsync(args, timeoutMs = 600000, onLine) {
   return new Promise((resolve) => {
     const node = core.resolveNode();
     const cli = core.resolveNpmCli(process.resourcesPath || '');
@@ -307,6 +308,15 @@ function runNpmAsync(args, timeoutMs = 600000) {
     log('npm(background):', node.exe, cli, ...args);
     const proc = spawn(node.exe, [cli, ...args], { cwd: PROFILE_DIR, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '', done = false, timedOut = false;
+    // npm's http log emits one line per registry request; forward each line
+    // to the caller (dashboard progress) as it arrives.
+    const onChunk = (chunk) => {
+      const lines = chunk.toString().split(/\r?\n/);
+      for (const line of lines) {
+        if (line === '') continue;
+        try { if (onLine) onLine(line); } catch { }
+      }
+    };
     // npm (a node script) can hang on a stalled network; never let the
     // dashboard's update promise dangle forever. Kill the whole tree so no
     // npm child process survives the timeout.
@@ -319,8 +329,8 @@ function runNpmAsync(args, timeoutMs = 600000) {
     const settle = (v) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
     proc.stdout.on('error', () => { });
     proc.stderr.on('error', () => { });
-    proc.stdout.on('data', (d) => { out += d.toString(); });
-    proc.stderr.on('data', (d) => { err += d.toString(); });
+    proc.stdout.on('data', (d) => { out += d.toString(); onChunk(d); });
+    proc.stderr.on('data', (d) => { err += d.toString(); onChunk(d); });
     proc.on('error', (e) => settle({ status: -1, error: String(e && e.message || e), out, err }));
     proc.on('exit', (code) => {
       settle({
@@ -381,9 +391,27 @@ async function updateDsh(ver) {
     return false;
   }
   log('dsh version change requested:', ver);
-  const r = await runNpmAsync(['install', '--prefix', RUNTIME_DIR, '--no-audit', '--no-fund', '@deepseek-ai/dsh@' + ver]);
+  // Live progress for the dashboard: parse npm's http log (--loglevel=http)
+  // line by line and broadcast throttled updates via the status channel.
+  const acc = { phase: 'fetch', fetched: 0 };
+  let lastPush = 0;
+  const push = (force) => {
+    const now = Date.now();
+    if (force || now - lastPush > 150) {
+      lastPush = now;
+      dshInstallProgress = { phase: acc.phase, fetched: acc.fetched, version: ver };
+      broadcastStatus();
+    }
+  };
+  const r = await runNpmAsync(
+    ['install', '--prefix', RUNTIME_DIR, '--no-audit', '--no-fund', '--loglevel=http', '@deepseek-ai/dsh@' + ver],
+    600000,
+    (line) => { core.npmProgressLine(line, acc); push(false); },
+  );
+  dshInstallProgress = null;
   log('dsh version change exit', r.status, r.error || r.err || '');
   if (r.status === 0) { settings.dshVersion = ver; saveSettings(); if (phase === 'running') restartServer(); }
+  broadcastStatus();
   return r.status === 0;
 }
 
@@ -395,7 +423,7 @@ function setPhase(p) {
   updateTrayMenu();
 }
 function broadcastStatus() {
-  const payload = { phase, url: serverUrl, error: lastError, guard: lastGuard, curated: curatedState, update: updateState };
+  const payload = { phase, url: serverUrl, error: lastError, guard: lastGuard, curated: curatedState, update: updateState, dshInstall: dshInstallProgress };
   for (const win of [splashWindow, dashWindow]) {
     try { if (win && !win.isDestroyed()) win.webContents.send('status:changed', payload); } catch { }
   }
@@ -1252,7 +1280,7 @@ function trustedSender(event) {
     (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.id === id);
 }
 function statusPayload() {
-  return { phase, url: serverUrl, error: lastError, guard: lastGuard, curated: curatedState, update: updateState, autoLaunch: getAutoLaunch(), locale: IS_ZH ? 'zh' : 'en', appVersion: app.getVersion() };
+  return { phase, url: serverUrl, error: lastError, guard: lastGuard, curated: curatedState, update: updateState, dshInstall: dshInstallProgress, autoLaunch: getAutoLaunch(), locale: IS_ZH ? 'zh' : 'en', appVersion: app.getVersion() };
 }
 function registerIpc() {
   ipcMain.handle('status:get', (e) => trustedSender(e) ? statusPayload() : null);
