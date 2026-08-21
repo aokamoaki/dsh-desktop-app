@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('dsh', {
   updateDsh: (v) => ipcRenderer.invoke('dsh:update', v),
   getAutoLaunch: () => ipcRenderer.invoke('app:autoLaunch'),
   setAutoLaunch: (on) => ipcRenderer.invoke('app:autoLaunch', !!on),
+  getNpmRegistry: () => ipcRenderer.invoke('npm:getRegistry'),
+  setNpmRegistry: (url) => ipcRenderer.invoke('npm:setRegistry', url),
   exportDiagnostics: () => ipcRenderer.invoke('app:exportDiagnostics'),
   checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
   downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),

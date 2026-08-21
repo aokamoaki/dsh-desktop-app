@@ -230,6 +230,14 @@
         <select id="versions" title="Rollback target"></select>
         <button id="update">Update / Rollback</button>
       </div>
+      <div class="row" style="padding-top:8px">
+        <span class="lbl" id="lMirror">npm mirror</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;flex:1;justify-content:flex-end">
+          <input id="mirrorUrl" type="text" placeholder="https://registry.npmmirror.com" spellcheck="false"
+                 style="flex:1;min-width:120px;max-width:220px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border-radius:8px;padding:4px 8px;font-size:11.5px;font-family:ui-monospace,Consolas,monospace">
+          <label class="switch" title="Use npm mirror for dsh updates"><input type="checkbox" id="mirrorOn"><span class="track"></span></label>
+        </span>
+      </div>
       <div class="msg" id="msg"></div>
       <div class="progwrap" id="dshProg" style="display:none">
         <div class="prog"><div class="progbar" id="dshProgBar"></div></div>

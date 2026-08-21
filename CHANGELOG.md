@@ -2,6 +2,10 @@
 
 本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
 
+## [1.0.6] - 2026-08-22
+
+- 新增：仪表盘「npm 镜像」开关——官方 registry 在部分网络（如国内直连）下 tarball 下载极慢导致 dsh 更新 600s 超时，现可在 dsh Version 卡片开启镜像并填写地址（默认建议 https://registry.npmmirror.com），更新/回滚时自动附加 `--registry=`。同时支持环境变量 `DSH_NPM_REGISTRY` 与 settings.json 的 `npmRegistry`，优先级：环境变量 > 设置 > 官方源
+
 ## [1.0.5] - 2026-08-22
 
 - 新增：仪表盘「更新 / 回滚 dsh」实时进度条——安装时以 `--loglevel=http` 运行 npm，逐行解析输出（已下载包数 / reify / 完成 / 错误），经状态通道 150ms 节流推送，进度条在下载阶段流动动画、安装阶段定格 85%、成功 100%、失败归零

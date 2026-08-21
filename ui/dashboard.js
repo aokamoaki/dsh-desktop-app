@@ -24,7 +24,7 @@
     dashboard: '仪表盘', service: '服务', status: '状态', addr: '地址', restart: '重启服务', start: '启动服务', browser: '浏览器打开',
     logs: '日志目录', autoLaunch: '登录时启动', diag: '导出诊断', guard: '启动体检', dshVer: 'dsh 版本',
     cur: '当前', latest: '最新', update: '更新 / 回滚', rollback: '回滚目标', appVer: '桌面应用', version: '版本', checkUpdate: '检查更新',
-    dlInstall: '下载并安装', logsT: '日志', refresh: '刷新', installing: '正在安装', done: '完成', failed: '失败（见日志）', fetching: '正在下载',
+    dlInstall: '下载并安装', logsT: '日志', refresh: '刷新', installing: '正在安装', done: '完成', failed: '失败（见日志）', fetching: '正在下载', mirror: 'npm 镜像',
     guardOk: '✓ 启动体检通过', guardAuto: '已自动禁用损坏插件', guardFixed: '自动修复', guardRolled: '已回滚配置',
     guardSkipped: '启动体检跳过', guardNone: '尚无体检记录', updateCheck: '正在检查更新...', updateNone: '已是最新版本',
     updateAvail: '发现新版本', downloading: '正在下载...', ready: '安装包已就绪', installStarted: '安装程序已启动',
@@ -34,7 +34,7 @@
     dashboard: 'Dashboard', service: 'Service', status: 'Status', addr: 'Address', restart: 'Restart', start: 'Start Server', browser: 'Open in Browser',
     logs: 'Logs Folder', autoLaunch: 'Launch at login', diag: 'Export Diagnostics', guard: 'Startup Guard', dshVer: 'dsh Version',
     cur: 'Current', latest: 'Latest', update: 'Update / Rollback', rollback: 'Rollback target', appVer: 'Desktop App', version: 'Version', checkUpdate: 'Check for Updates',
-    dlInstall: 'Download & Install', logsT: 'Logs', refresh: 'Refresh', installing: 'Installing', done: 'Done', failed: 'Failed (see logs)', fetching: 'Fetching',
+    dlInstall: 'Download & Install', logsT: 'Logs', refresh: 'Refresh', installing: 'Installing', done: 'Done', failed: 'Failed (see logs)', fetching: 'Fetching', mirror: 'npm mirror',
     guardOk: '✓ Startup check passed', guardAuto: 'Auto-disabled broken plugin', guardFixed: 'Auto-repaired', guardRolled: 'Config rolled back',
     guardSkipped: 'Startup check skipped', guardNone: 'No check recorded yet', updateCheck: 'Checking for updates...', updateNone: 'You are up to date',
     updateAvail: 'Update available', downloading: 'Downloading...', ready: 'Installer ready', installStarted: 'Installer launched',
@@ -229,6 +229,32 @@
   });
   $('refresh').addEventListener('click', () => { refreshLogs(); refreshVersions(true); });
   $('autoLaunch').addEventListener('change', (e) => { window.dsh.setAutoLaunch(e.target.checked); });
+  // npm mirror toggle: a mirror registry makes dsh update/rollback usable
+  // where the official npm registry is slow or blocked (e.g. CN routes).
+  // Empty = official registry; checked + url = --registry=<url> on npm.
+  const mirrorOn = $('mirrorOn'), mirrorUrl = $('mirrorUrl');
+  function applyMirrorUI(url) {
+    const v = (url || '').trim();
+    mirrorUrl.value = v;
+    mirrorOn.checked = !!v;
+  }
+  window.dsh.getNpmRegistry().then(applyMirrorUI).catch(() => { });
+  mirrorOn.addEventListener('change', () => {
+    if (mirrorOn.checked) {
+      const v = mirrorUrl.value.trim() || 'https://registry.npmmirror.com';
+      mirrorUrl.value = v;
+      window.dsh.setNpmRegistry(v).then(applyMirrorUI);
+    } else {
+      window.dsh.setNpmRegistry('').then(applyMirrorUI);
+    }
+  });
+  mirrorUrl.addEventListener('change', () => {
+    if (mirrorOn.checked) {
+      const v = mirrorUrl.value.trim();
+      if (v) window.dsh.setNpmRegistry(v).then(applyMirrorUI);
+      else { mirrorOn.checked = false; window.dsh.setNpmRegistry('').then(applyMirrorUI); }
+    }
+  });
   $('diag').addEventListener('click', () => {
     window.dsh.exportDiagnostics().then((r) => { if (r && r.ok) showMsg(r.path, true); else showMsg((r && r.error) || U.failed, false); });
   });

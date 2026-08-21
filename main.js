@@ -403,16 +403,29 @@ async function updateDsh(ver) {
       broadcastStatus();
     }
   };
-  const r = await runNpmAsync(
-    ['install', '--prefix', RUNTIME_DIR, '--no-audit', '--no-fund', '--loglevel=http', '@deepseek-ai/dsh@' + ver],
-    600000,
-    (line) => { core.npmProgressLine(line, acc); push(false); },
-  );
+  // npm registry override: the official registry's tarball downloads can be
+  // near-unusable behind slow CN routes while metadata responds fine, which
+  // made updates time out at 600s. Honor an explicit registry from env
+  // (DSH_NPM_REGISTRY) or settings.json (npmRegistry, editable in the
+  // dashboard) so users can point at a mirror without touching .npmrc.
+  const registry = npmRegistryOverride();
+  const npmArgs = ['install', '--prefix', RUNTIME_DIR, '--no-audit', '--no-fund', '--loglevel=http'];
+  if (registry) { npmArgs.push('--registry=' + registry); log('dsh update using npm registry:', registry); }
+  npmArgs.push('@deepseek-ai/dsh@' + ver);
+  const r = await runNpmAsync(npmArgs, 600000, (line) => { core.npmProgressLine(line, acc); push(false); });
   dshInstallProgress = null;
   log('dsh version change exit', r.status, r.error || r.err || '');
   if (r.status === 0) { settings.dshVersion = ver; saveSettings(); if (phase === 'running') restartServer(); }
   broadcastStatus();
   return r.status === 0;
+}
+
+// --- npm registry override -----------------------------------
+// A mirror is honored from env (DSH_NPM_REGISTRY) or settings.json
+// (npmRegistry, editable from the dashboard) and passed to npm as
+// --registry=<url>. Empty string means "use npm's default (official)".
+function npmRegistryOverride() {
+  return process.env.DSH_NPM_REGISTRY || (typeof settings.npmRegistry === 'string' && settings.npmRegistry.trim()) || '';
 }
 
 // --- phase / status ------------------------------------------
@@ -1307,6 +1320,15 @@ function registerIpc() {
     if (!trustedSender(e)) return null;
     if (on === undefined || on === null) return getAutoLaunch();
     return setAutoLaunch(on);
+  });
+  // npm mirror toggle: get current override ('' = official), set and persist.
+  ipcMain.handle('npm:getRegistry', (e) => trustedSender(e) ? npmRegistryOverride() : null);
+  ipcMain.handle('npm:setRegistry', (e, url) => {
+    if (!trustedSender(e)) return null;
+    const v = typeof url === 'string' ? url.trim() : '';
+    settings.npmRegistry = v;
+    saveSettings();
+    return v;
   });
   ipcMain.handle('app:exportDiagnostics', (e) => trustedSender(e) ? exportDiagnostics() : null);
   ipcMain.handle('app:checkUpdate', (e) => { if (trustedSender(e)) return checkForUpdate(true); });
