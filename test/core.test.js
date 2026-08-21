@@ -212,14 +212,49 @@ describe('externalPath', () => {
 });
 
 describe('resolveNpmCli', () => {
-  test('prefers the bundled npm under resourcesPath', () => {
-    const res = tmpdir();
+  function bundledNpm(res, withDeps) {
     const cli = path.join(res, 'npm', 'bin', 'npm-cli.js');
     fs.mkdirSync(path.dirname(cli), { recursive: true });
     fs.writeFileSync(cli, '// fake npm');
+    if (withDeps) {
+      const deps = path.join(res, 'npm', 'node_modules', 'graceful-fs');
+      fs.mkdirSync(path.dirname(deps), { recursive: true });
+      fs.writeFileSync(deps, '// fake graceful-fs');
+    }
+    return cli;
+  }
+  test('prefers the bundled npm under resourcesPath when its deps are intact', () => {
+    const res = tmpdir();
+    const cli = bundledNpm(res, true);
     try {
       assert.equal(core.resolveNpmCli(res), cli);
     } finally { fs.rmSync(res, { recursive: true, force: true }); }
+  });
+  test('ignores a bundled npm whose node_modules did not survive packaging', () => {
+    // electron-builder's default extraResources filter strips node_modules,
+    // leaving npm-cli.js present but unusable (MODULE_NOT_FOUND graceful-fs);
+    // the resolver must skip it and fall through instead of selecting it.
+    const res = tmpdir();
+    const cli = bundledNpm(res, false);
+    try {
+      const r = core.resolveNpmCli(res);
+      assert.notEqual(r, cli, 'must not select a bundled npm missing graceful-fs');
+      assert.ok(r === null || typeof r === 'string');
+    } finally { fs.rmSync(res, { recursive: true, force: true }); }
+  });
+  test('env override DSH_DESKTOP_NPM wins over everything', () => {
+    const res = tmpdir();
+    bundledNpm(res, true);
+    const override = path.join(res, 'override-npm-cli.js');
+    fs.writeFileSync(override, '// override');
+    const prev = process.env.DSH_DESKTOP_NPM;
+    try {
+      process.env.DSH_DESKTOP_NPM = override;
+      assert.equal(core.resolveNpmCli(res), override);
+    } finally {
+      if (prev === undefined) delete process.env.DSH_DESKTOP_NPM; else process.env.DSH_DESKTOP_NPM = prev;
+      fs.rmSync(res, { recursive: true, force: true });
+    }
   });
   test('falls through to system npm when nothing is bundled', () => {
     const r = core.resolveNpmCli(path.join(tmpdir(), 'missing'));

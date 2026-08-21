@@ -2,6 +2,11 @@
 
 本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
 
+## [1.0.4] - 2026-08-21
+
+- 修复：仪表盘「更新 / 回滚」再次失败——客户端自带 npm 被打包时被 electron-builder 默认过滤器（`!**/node_modules/**`）剥掉了 `node_modules`，npm 一启动就报 `MODULE_NOT_FOUND: graceful-fs`（退出码 7），更新/回滚在真正下载前就失败。`extraResources` 的 `resources/npm` 拷贝现在显式包含全部文件（filter: **/*），自带 npm 恢复完整依赖
+- 加固：`core.resolveNpmCli()` 只有在自带 npm 的 `node_modules/graceful-fs` 存在（即依赖确实进了包）时才选用它；被打包剥空的 npm 会自动跳过、回退系统 npm，旧安装包也能正常更新
+
 ## [1.0.3] - 2026-08-20
 
 - 修复：新版 dsh 运行时（`dsh --profile web`）启动时会自动调用默认浏览器打开网页，导致桌面客户端每次启动都弹浏览器。现在壳内嵌视图渲染 UI，启动时不再弹出浏览器；托盘/菜单「浏览器打开」仍是显式出口
