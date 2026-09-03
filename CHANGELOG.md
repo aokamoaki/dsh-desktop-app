@@ -2,7 +2,7 @@
 
 本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
 
-## [Unreleased]
+## [1.0.8] - 2026-09-03
 
 - 修复：精选插件首启自动安装与手动 `dsh plugin add` 在全新（无 Node）机器上全部失败——dsh 运行时的 `plugin add` 是 pnpm 转发器（`spawnSync("pnpm", ...)`），而安装包只内置 npm、未内置 pnpm，普通用户机器既无 pnpm 也无 Node，导致 dshmarket bootstrap 与其余精选插件全部秒退（exit 127 `pnpm not found`）、且每次启动静默重试
   - 首启 `ensurePnpm()`：用内置 npm（Electron-as-Node）+ 同一镜像链（`DSH_NPM_REGISTRY` > `settings.npmRegistry` > 中文默认 npmmirror）把独立版 `@pnpm/exe`（内嵌 Node、无需系统 Node）装进 `~/.dsh/pnpm`，再把其目录前置进 `process.env.PATH`——首启自动装、market 内部 pnpm、以及凡经 App 拉起的 `dsh plugin add` 均能找到 pnpm
