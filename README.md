@@ -25,6 +25,8 @@ npm run smoke          # 冒烟模式：attach 后打印 SMOKE_OK 退出
 npm run dist           # 打包（NSIS 安装版 + 免安装版）
 ```
 
+> **构建前置**：`resources/npm/` 须先执行 `npm run provision:npm` 生成（已被 `.gitignore` 忽略、不进库）；「首装种子锁」`resources/runtime/package.json` + `package-lock.json` **必须 git add 入库**——全新机器首次安装依赖它走 `npm ci` 快速路径（约 30s），缺失会退化为全量依赖解析（10 分钟以上）。
+
 ## 🏗️ 结构
 
 ```
@@ -42,7 +44,7 @@ gh release create vx.y.z dist\DeepSeek-Harness-Setup-x.y.z.exe dsh-update.json  
 npm run dist                            # 4. 重新打包（把更新地址打进应用）→ 分发
 ```
 
-> `--repo` 必须是真实仓库，否则内置更新地址 404；未签名的安装包在其他机器上会触发 SmartScreen「未知发布者」提示（功能不受影响，正式分发建议购买代码签名证书）。
+> `make-release.mjs` 会在 `dsh-update.json` 写入安装包的 `sha512` + `size` 完整性字段；客户端下载完成后校验二者，篡改/损坏会被拒绝。`--repo` 必须是真实仓库，否则内置更新地址 404；未签名的安装包在其他机器上会触发 SmartScreen「未知发布者」提示（功能不受影响，正式分发建议购买代码签名证书）。运行时安装/更新/回滚与自更新的行为、npm 镜像、升级后自证方法见 [`docs/delivery.md`](docs/delivery.md)。
 
 ## 🔌 与插件的关系
 

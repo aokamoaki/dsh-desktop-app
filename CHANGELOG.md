@@ -2,6 +2,27 @@
 
 本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
 
+## [1.0.7] - 2026-09-03
+
+- 修复：全新机器首次运行即报「dsh bin not found」且无法恢复——首启自动安装 dsh 运行时打官方 registry，在慢速/受限网络（如国内直连）下 tarball 下载卡死，npm 超时被杀，安装失败；随后真实原因又被误导性的 `dsh bin not found` 覆盖，「重试」又只重启服务、从不重装运行时，用户永久卡在错误页
+  - 首启自动安装与仪表盘更新/回滚统一走同一 registry 解析（此前镜像开关只对仪表盘生效）：中文用户未显式配置时默认使用 `https://registry.npmmirror.com`；优先级不变：环境变量 `DSH_NPM_REGISTRY` > 设置 `npmRegistry`（仪表盘可改，空 = 官方源）> 中文默认镜像 / 其他地区官方源
+  - **首装预置锁文件**：实测发现 npm 11 对 dsh 这套约 500 包、peer 依赖密集的依赖树做无锁全量解析会 CPU 忙循环 10 分钟以上（远超安装超时，与网络无关）。客户端随包分发已知良好的 `package.json + package-lock.json`（resources/runtime，512 包锁定 0.1.1-rc.2），首次安装自动播种并走 `npm ci`：镜像实测 **26 秒**装完
+  - **安装跳过 lifecycle 脚本**（`--ignore-scripts`）：koffi / node-pty 等原生包的 postinstall 会调用裸 `node`，而无 Node 环境的小白机器上（应用以 Electron-as-Node 驱动 npm）这一步必然失败——实测二者均随包携带平台预编译产物，跳过脚本后加载正常、dsh 服务可正常启动
+  - 首装 npm 显式限制 fetch 超时（120s × 重试 1 次），断网/被墙时几分钟内即报 npm 真实错误，不再 10 分钟干等后超时；安装整体超时放宽到 20 分钟（正常镜像+锁约 1 分钟内）
+  - 安装失败保留真实原因（超时 / npm-cli 缺失 / npm 退出码 + stderr 尾部）上屏，不再被 `dsh bin not found` 覆盖
+  - 「重试」与「启动服务」在 bin 缺失时先重新安装 dsh 运行时再启动，失败可一键重装恢复
+  - 已知限制：仪表盘「更新/回滚」到锁文件之外的新版本（dsh 全家桶随 rc 同步升版）仍会触发 npm 全量解析，可能耗时较长——有进度条与 15 分钟超时兜底，属后续优化项
+- 修复：dsh 版本枚举（「最新」/「版本列表」）硬编码官方 registry、忽略 npm 镜像开关——镜像用户拉取 `@deepseek-ai/dsh` metadata 仍直连 registry.npmjs.org，超时/被墙后最新版为 null、版本列表为空、更新/回滚入口消失。现将 registry 解析统一到同一覆盖链（环境变量 > settings.npmRegistry > 中文默认 npmmirror），metadata 拉取与 `npm install` 共用镜像，随仪表盘镜像开关即时切换
+- 摆脱 curl.exe 依赖：dsh metadata、应用更新 manifest 检查、安装包下载全部改用 Node 内置 http/https（支持代理 env、超时、重定向、非 2xx 拒绝），curl 缺失或被墙不再导致版本列表空、最新版 null、下载失败
+- 应用自更新加固：`installUpdate` 先退出应用（复用 `wantQuit` + 单实例锁生命周期，避免运行中 exe 被占、不产生僵尸/双实例）再以 `/S` 静默运行 NSIS 安装器并在装完后自动重启到新版本；下载完成后按 manifest 的 `sha512`+`size` 校验完整性（`make-release.mjs` 现写入这两个字段，篡改/损坏的安装包会被拒绝并删除）
+- dsh 更新/回滚固定 `--cache` + `--prefer-offline` 并对齐 fetch 超时（120s × 1），二次更新/回滚复用已缓存 tarball、不再每次全量解析；成功后持久化 `package-lock.json`，后续重装/回滚走 `npm ci` 快路径
+- 首装实时进度：全新机器首次安装 dsh 运行时同样解析 npm http 日志并经状态通道推送 `dshInstallProgress`（与仪表盘「更新/回滚」同一进度通道），不再只有静态 spinner
+- 修复（reviewer low 项 1–3，本版一并解决）：
+  - `checkForUpdate` 在 manifest 拉取失败（断网/超时/非 2xx）或解析非法时，状态记为真实错误并通知用户，不再误报为「已是当前版本」
+  - 版本枚举 `latestDshVersion`/`listDshVersions` 拉取失败时写诊断日志（desktop.log）；仪表盘版本下拉在列表为空时回退显示当前版本，不再完全静默
+  - `resolveProxy` 把显式指定的 `DSH_UPDATE_PROXY` 优先级提到环境代理 `https_proxy`/`http_proxy` 之前，专用代理优先
+- 已知限制（reviewer low 项 4，留待后续）：`ConnectProxyAgent` 仅支持 http(s) 代理的 CONNECT 隧道，`https://` 形式的代理地址暂不支持
+
 ## [1.0.6] - 2026-08-22
 
 - 新增：仪表盘「npm 镜像」开关——官方 registry 在部分网络（如国内直连）下 tarball 下载极慢导致 dsh 更新 600s 超时，现可在 dsh Version 卡片开启镜像并填写地址（默认建议 https://registry.npmmirror.com），更新/回滚时自动附加 `--registry=`。同时支持环境变量 `DSH_NPM_REGISTRY` 与 settings.json 的 `npmRegistry`，优先级：环境变量 > 设置 > 官方源
