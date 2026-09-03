@@ -282,7 +282,18 @@
     umsg.textContent = U.downloading;
     umsg.className = 'msg';
     window.dsh.downloadUpdate().then((r) => {
-      if (r && r.ok) { umsg.textContent = U.ready; umsg.className = 'msg ok'; window.dsh.installUpdate(); setTimeout(() => { umsg.textContent = U.installStarted; }, 600); }
+      if (r && r.ok) {
+        umsg.textContent = U.ready;
+        umsg.className = 'msg ok';
+        // installUpdate() quits the app to release the exe lock, then runs the
+        // NSIS installer silently (/S) and relaunches. Only a false return is
+        // a real failure (missing installer); a truthy return means the app is
+        // about to quit, so do NOT claim "launched" on a false result.
+        window.dsh.installUpdate().then((started) => {
+          if (started === false) { umsg.textContent = U.failed; umsg.className = 'msg err'; }
+          else { setTimeout(() => { umsg.textContent = U.installStarted; }, 600); }
+        }).catch(() => { umsg.textContent = U.failed; umsg.className = 'msg err'; });
+      }
       else { umsg.textContent = (r && r.error) || U.failed; umsg.className = 'msg err'; }
     }).catch((e) => { umsg.textContent = (e && e.message) || U.failed; umsg.className = 'msg err'; })
       .finally(() => { btn.disabled = false; btn.textContent = orig; });

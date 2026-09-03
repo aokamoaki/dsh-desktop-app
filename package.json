@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop-app",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": true,
   "author": "aokamoaki",
   "license": "MIT",
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron .",
     "smoke": "electron . --smoke",
-    "test": "node --test test/core.test.js",
+    "test": "node --test --test-isolation=none test/core.test.js",
     "provision:npm": "npm install --prefix resources/npm npm@11 --no-audit --no-fund",
     "dist": "electron-builder --win",
     "dist:portable": "electron-builder --win portable"
@@ -43,6 +43,10 @@
       {
         "from": "resources/npm",
         "to": "npm"
+      },
+      {
+        "from": "resources/runtime",
+        "to": "runtime"
       }
     ],
     "afterPack": "scripts/afterPack.cjs",

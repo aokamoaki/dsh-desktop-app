@@ -39,7 +39,7 @@ contextBridge.exposeInMainWorld('dsh', {
   updateDsh: () => Promise.resolve(true),
   checkUpdate: () => {},
   downloadUpdate: () => Promise.resolve({ ok: true }),
-  installUpdate: () => true,
+  installUpdate: () => Promise.resolve(true),
   // frameless window controls (dashboard header is the title bar)
   minimize: () => {},
   maximize: () => Promise.resolve(false),

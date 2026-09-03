@@ -4,15 +4,18 @@
 //   node make-release.mjs --repo=<user>/<repo> [--version=x.y.z]
 //
 // Reads the app version from package.json (or --version=), locates the latest
-// Setup artifact in dist, and writes dsh-update.json with the GitHub
-// "latest" release asset URLs. Then upload BOTH files to the release:
+// Setup artifact in dist, computes its sha512 (base64) and size (bytes), and
+// writes dsh-update.json with { version, url, sha512, size }. The client
+// verifies size + sha512 after download so a corrupted or tampered installer
+// can never be installed. Then upload BOTH files to the release:
 //
 //   gh release create v0.1.7 dist/DeepSeek-Harness-Setup-*.exe dsh-update.json
 //
 // and configure the desktop app's Update URL (dashboard -> Desktop App ->
 // Update URL) to:
 //   https://github.com/<user>/<repo>/releases/latest/download/dsh-update.json
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, basename } from 'node:path';
 
 const repoArg = process.argv.find((a) => a.startsWith('--repo='));
@@ -34,10 +37,15 @@ if (setups.length === 0) {
   process.exit(1);
 }
 const setup = setups[setups.length - 1];
+const setupPath = join(dist, setup);
+const size = statSync(setupPath).size;
+const sha512 = createHash('sha512').update(readFileSync(setupPath)).digest('base64');
 
 const manifest = {
   version,
   url: `https://github.com/${repo}/releases/latest/download/${basename(setup)}`,
+  sha512,
+  size,
 };
 const builtin = {
   url: `https://github.com/${repo}/releases/latest/download/dsh-update.json`,
@@ -49,10 +57,12 @@ writeFileSync(join(appDir, 'dsh-update.json'), JSON.stringify(manifest, null, 2)
 // Rebuild the installer AFTER generating it.
 writeFileSync(join(appDir, 'update-url.json'), JSON.stringify(builtin, null, 2) + '\n');
 
-console.log('manifest written: dsh-update.json (release asset)');
+console.log('manifest written: dsh-update.json (release asset, with sha512 + size)');
 console.log(JSON.stringify(manifest, null, 2));
 console.log('builtin written: update-url.json (packaged into the app)');
 console.log(JSON.stringify(builtin, null, 2));
+console.log('');
+console.log(`integrity: sha512=${sha512.slice(0, 16)}... size=${size}`);
 console.log('');
 console.log('Upload to the release, e.g.:');
 console.log(`  gh release create v${version} ${join('dist', setup)} dsh-update.json`);

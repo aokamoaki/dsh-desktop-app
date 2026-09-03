@@ -3,6 +3,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const net = require('node:net');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -42,6 +43,14 @@ describe('semverDesc', () => {
   });
   test('malformed versions compare as equal (never break sorting)', () => {
     assert.ok(core.semverDesc('garbage', '1.0.0') === 0);
+  });
+  test('numeric prerelease identifiers rank below alphanumeric (semver precedence)', () => {
+    assert.ok(core.semverDesc('0.1.0-rc.1', '0.1.0-rc.beta') > 0, 'rc.beta newer than rc.1');
+    assert.ok(core.semverDesc('0.1.0-rc.beta', '0.1.0-rc.1') < 0);
+  });
+  test('shorter prerelease is older than a longer extension of it', () => {
+    assert.ok(core.semverDesc('0.1.0-alpha', '0.1.0-alpha.1') > 0, 'alpha.1 newer than alpha');
+    assert.ok(core.semverDesc('0.1.0-alpha.1', '0.1.0-alpha') < 0);
   });
 });
 
@@ -213,6 +222,12 @@ describe('npmProgressLine', () => {
     core.npmProgressLine('added 512 packages, and audited 513 packages in 42s', acc);
     assert.equal(acc.phase, 'done');
   });
+  test('changed N packages also flips the phase to done', () => {
+    const acc = { fetched: 7 };
+    core.npmProgressLine('changed 3 packages in 4s', acc);
+    assert.equal(acc.phase, 'done');
+    assert.equal(acc.fetched, 7, 'fetched count is preserved');
+  });
   test('switches to error on npm error lines', () => {
     const acc = { fetched: 0 };
     core.npmProgressLine('npm error code ETARGET', acc);
@@ -359,5 +374,191 @@ describe('readThemePreference', () => {
       assert.equal(core.readSettingsValue(home, 'ui-theme', 'preference'), 'dark');
       assert.equal(core.readSettingsValue(home, 'pet', 'preference'), null);
     } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+});
+
+describe('registryMetadataUrl', () => {
+  test('official registry when the override is empty', () => {
+    assert.equal(core.registryMetadataUrl('', '@deepseek-ai/dsh'), 'https://registry.npmjs.org/@deepseek-ai/dsh');
+    assert.equal(core.registryMetadataUrl(null, '@deepseek-ai/dsh'), 'https://registry.npmjs.org/@deepseek-ai/dsh');
+    assert.equal(core.registryMetadataUrl(undefined, '@deepseek-ai/dsh'), 'https://registry.npmjs.org/@deepseek-ai/dsh');
+  });
+  test('mirror / custom override is honored (the version enum follows the npm mirror switch)', () => {
+    assert.equal(core.registryMetadataUrl('https://registry.npmmirror.com', '@deepseek-ai/dsh'), 'https://registry.npmmirror.com/@deepseek-ai/dsh');
+    assert.equal(core.registryMetadataUrl('http://registry.internal:4873', '@deepseek-ai/dsh'), 'http://registry.internal:4873/@deepseek-ai/dsh');
+  });
+  test('trailing slashes are normalized away', () => {
+    assert.equal(core.registryMetadataUrl('https://registry.npmmirror.com/', '@deepseek-ai/dsh'), 'https://registry.npmmirror.com/@deepseek-ai/dsh');
+    assert.equal(core.registryMetadataUrl('https://registry.npmmirror.com///', '@deepseek-ai/dsh'), 'https://registry.npmmirror.com/@deepseek-ai/dsh');
+  });
+  test('preserves a registry path/port and strips a leading package slash', () => {
+    assert.equal(core.registryMetadataUrl('https://host:4873/npm', '/@deepseek-ai/dsh'), 'https://host:4873/npm/@deepseek-ai/dsh');
+  });
+});
+
+describe('parseUpdateManifest', () => {
+  test('accepts a full manifest with sha512 + size', () => {
+    const m = core.parseUpdateManifest({ version: '1.0.7', url: 'https://example.com/Setup.exe', sha512: 'abc==', size: 95853235 });
+    assert.deepEqual(m, { version: '1.0.7', url: 'https://example.com/Setup.exe', sha512: 'abc==', size: 95853235 });
+  });
+  test('rejects a missing version or a missing/non-http url', () => {
+    assert.equal(core.parseUpdateManifest(null), null);
+    assert.equal(core.parseUpdateManifest([]), null);
+    assert.equal(core.parseUpdateManifest({ url: 'https://example.com/Setup.exe' }), null);
+    assert.equal(core.parseUpdateManifest({ version: '1.0.7' }), null);
+    assert.equal(core.parseUpdateManifest({ version: '1.0.7', url: 'file:///C:/Setup.exe' }), null);
+  });
+  test('normalizes size and tolerates absent integrity fields (back-compat with old manifests)', () => {
+    const m = core.parseUpdateManifest({ version: '1.0.7', url: 'https://example.com/Setup.exe' });
+    assert.equal(m.sha512, '');
+    assert.equal(m.size, 0);
+    const m2 = core.parseUpdateManifest({ version: '1.0.7', url: 'https://example.com/Setup.exe', size: 99.9 });
+    assert.equal(m2.size, 99);
+  });
+  test('drops non-positive / non-finite / non-numeric size to 0', () => {
+    assert.equal(core.parseUpdateManifest({ version: '1.0.7', url: 'https://e.com/x', size: 0 }).size, 0);
+    assert.equal(core.parseUpdateManifest({ version: '1.0.7', url: 'https://e.com/x', size: -5 }).size, 0);
+    assert.equal(core.parseUpdateManifest({ version: '1.0.7', url: 'https://e.com/x', size: NaN }).size, 0);
+    assert.equal(core.parseUpdateManifest({ version: '1.0.7', url: 'https://e.com/x', size: 'big' }).size, 0);
+    assert.equal(core.parseUpdateManifest({ version: '1.0.7', url: 'https://e.com/x', size: Infinity }).size, 0);
+  });
+  test('trims version/url/sha512 whitespace', () => {
+    const m = core.parseUpdateManifest({ version: ' 1.0.7 ', url: ' https://e.com/x.exe ', sha512: ' abc== ' });
+    assert.equal(m.version, '1.0.7');
+    assert.equal(m.url, 'https://e.com/x.exe');
+    assert.equal(m.sha512, 'abc==');
+  });
+  test('integrity fields compose with fileSha512 + byte size for offline verification', async () => {
+    const f = path.join(tmpdir(), 'setup.bin');
+    const body = Buffer.from('not-a-real-installer-0123456789');
+    fs.writeFileSync(f, body);
+    try {
+      const m = core.parseUpdateManifest({
+        version: '1.0.7',
+        url: 'https://e.com/Setup.exe',
+        sha512: require('node:crypto').createHash('sha512').update(body).digest('base64'),
+        size: body.length,
+      });
+      assert.equal(m.sha512, await core.fileSha512(f));
+      assert.equal(m.size, fs.statSync(f).size);
+    } finally { fs.rmSync(path.dirname(f), { recursive: true, force: true }); }
+  });
+});
+
+describe('silentInstallArgs', () => {
+  test('builds the /S silent args and appends extras', () => {
+    assert.deepEqual(core.silentInstallArgs(), ['/S']);
+    assert.deepEqual(core.silentInstallArgs(['/updated']), ['/S', '/updated']);
+  });
+});
+
+describe('fileSha512', () => {
+  test('returns the base64 sha512 of a file (electron-builder encoding)', async () => {
+    const f = path.join(tmpdir(), 'x.bin');
+    fs.writeFileSync(f, Buffer.from('hello dsh'));
+    try {
+      const expected = require('node:crypto').createHash('sha512').update('hello dsh').digest('base64');
+      assert.equal(await core.fileSha512(f), expected);
+    } finally { fs.rmSync(path.dirname(f), { recursive: true, force: true }); }
+  });
+  test('resolves null for a missing file', async () => {
+    assert.equal(await core.fileSha512(path.join(tmpdir(), 'nope.bin')), null);
+  });
+});
+
+describe('fetchJson', () => {
+  test('parses a 2xx JSON body (no curl.exe)', async () => {
+    const srv = http.createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ok: true })); });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    try {
+      const j = await core.fetchJson(`http://127.0.0.1:${srv.address().port}/`);
+      assert.deepEqual(j, { ok: true });
+    } finally { srv.close(); }
+  });
+  test('follows redirects', async () => {
+    const srv = http.createServer((req, res) => {
+      if (req.url === '/start') { res.statusCode = 302; res.setHeader('location', '/end'); res.end(); }
+      else { res.end(JSON.stringify({ redirected: true })); }
+    });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    try {
+      const j = await core.fetchJson(`http://127.0.0.1:${srv.address().port}/start`);
+      assert.deepEqual(j, { redirected: true });
+    } finally { srv.close(); }
+  });
+  test('returns null on non-2xx / invalid JSON', async () => {
+    const srv = http.createServer((req, res) => { res.statusCode = 404; res.end('nope'); });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    try {
+      assert.equal(await core.fetchJson(`http://127.0.0.1:${srv.address().port}/`), null);
+    } finally { srv.close(); }
+  });
+});
+
+describe('downloadTo', () => {
+  test('streams a body to a file and reports its byte size', async () => {
+    const srv = http.createServer((req, res) => { res.end(Buffer.from('0123456789abcdef')); });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    const out = path.join(tmpdir(), 'out.bin');
+    try {
+      const r = await core.downloadTo(`http://127.0.0.1:${srv.address().port}/f`, out, { timeoutMs: 3000 });
+      assert.equal(r.ok, true);
+      assert.equal(r.size, 16);
+      assert.equal(fs.readFileSync(out, 'utf8'), '0123456789abcdef');
+    } finally { srv.close(); fs.rmSync(path.dirname(out), { recursive: true, force: true }); }
+  });
+  test('returns a real error string on non-2xx', async () => {
+    const srv = http.createServer((req, res) => { res.statusCode = 500; res.end('boom'); });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    const out = path.join(tmpdir(), 'out.bin');
+    try {
+      const r = await core.downloadTo(`http://127.0.0.1:${srv.address().port}/f`, out);
+      assert.equal(r.ok, false);
+      assert.equal(r.error, 'http 500');
+    } finally { srv.close(); fs.rmSync(path.dirname(out), { recursive: true, force: true }); }
+  });
+});
+
+describe('proxy support (self-contained, no bundled deps)', () => {
+  test('fetchJson routes a plain http request through an http proxy (absolute-form)', async () => {
+    const target = http.createServer((req, res) => { res.end(JSON.stringify({ viaProxy: true })); });
+    await new Promise((r) => target.listen(0, '127.0.0.1', r));
+    const proxy = http.createServer((req, res) => {
+      let tu;
+      try { tu = new URL(req.url); } catch { res.writeHead(400); res.end(); return; }
+      const up = http.request(tu, (r2) => { res.writeHead(r2.statusCode || 200, r2.headers); r2.pipe(res); });
+      up.on('error', () => { try { res.writeHead(502); res.end(); } catch { } });
+      req.pipe(up);
+    });
+    await new Promise((r) => proxy.listen(0, '127.0.0.1', r));
+    try {
+      const j = await core.fetchJson(`http://127.0.0.1:${target.address().port}/x`, {
+        proxy: `http://127.0.0.1:${proxy.address().port}`, timeoutMs: 3000,
+      });
+      assert.deepEqual(j, { viaProxy: true });
+    } finally { proxy.close(); target.close(); }
+  });
+
+  test('https requests issue a CONNECT handshake through a proxy', async () => {
+    let got = '';
+    const proxy = net.createServer((sock) => {
+      sock.on('error', () => { /* client may reset after the failed handshake */ });
+      sock.on('data', (d) => {
+        got += d.toString();
+        if (!got.includes('\r\n\r\n')) return;
+        // Report 200 Established, then feed an invalid TLS ServerHello and
+        // destroy. The client's TLS handshake fails cleanly (fetchJson -> null)
+        // but the CONNECT negotiation header has already been captured.
+        sock.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+        sock.write(Buffer.from('not-a-tls-server-hello'));
+        setTimeout(() => sock.destroy(), 30);
+      });
+    });
+    await new Promise((r) => proxy.listen(0, '127.0.0.1', r));
+    try {
+      const r = await core.fetchJson('https://example.com/', { proxy: `http://127.0.0.1:${proxy.address().port}`, timeoutMs: 3000 });
+      assert.equal(r, null, 'handshake failure degrades to null, never throws');
+      assert.match(got, /^CONNECT example\.com:443 HTTP\/1\.1\r\n/);
+    } finally { proxy.close(); }
   });
 });

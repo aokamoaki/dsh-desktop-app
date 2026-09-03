@@ -59,12 +59,14 @@ const L = {
     guardOk: '启动体检通过', guardAuto: '已自动禁用损坏插件', guardFixed: '自动修复',
     attach: '已连接运行中的服务', starting: '正在启动服务...', installingRuntime: '正在安装 dsh 运行时...',
     ready: '就绪', failedToStart: '启动失败', retry: '重试',
+    runtimeInstallFailed: 'dsh 运行时安装失败', binNotFound: '未找到 dsh 运行时（未安装或安装失败，可点“重试”重新安装）',
     cut: '剪切', copy: '复制', paste: '粘贴', selectAll: '全选',
     openLink: '在浏览器中打开链接', copyLink: '复制链接地址', openImage: '在浏览器中打开图片', copyImage: '复制图片地址',
     newWindow: '在新窗口中打开链接', saveLink: '链接另存为…', saveImage: '图片另存为…', copyImageBitmap: '复制图片',
     hideToTray: '隐藏到托盘', screenshot: '网页截图', screenshotSaved: '截图已保存', screenshotFailed: '截图失败', inspect: '检查元素',
     find: '页内查找',
     updateUrlMissing: '未配置更新地址（settings.json 的 updateUrl）',
+    checkFailed: '检查更新失败',
     phaseStopped: '已停止', phaseStarting: '启动中', phaseInstalling: '安装中', phaseRunning: '运行中', phaseError: '错误',
   },
   en: {
@@ -82,12 +84,14 @@ const L = {
     guardOk: 'Startup check passed', guardAuto: 'Auto-disabled broken plugin', guardFixed: 'Auto-repaired',
     attach: 'Attached to a running server', starting: 'Starting server...', installingRuntime: 'Installing dsh runtime...',
     ready: 'Ready', failedToStart: 'Failed to start', retry: 'Retry',
+    runtimeInstallFailed: 'Failed to install the dsh runtime', binNotFound: 'dsh runtime not found (not installed or install failed - press Retry to reinstall)',
     cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
     openLink: 'Open Link in Browser', copyLink: 'Copy Link Address', openImage: 'Open Image in Browser', copyImage: 'Copy Image Address',
     newWindow: 'Open Link in New Window', saveLink: 'Save Link As…', saveImage: 'Save Image As…', copyImageBitmap: 'Copy Image',
     hideToTray: 'Hide to Tray', screenshot: 'Capture Page', screenshotSaved: 'Screenshot saved', screenshotFailed: 'Screenshot failed', inspect: 'Inspect Element',
     find: 'Find in Page',
     updateUrlMissing: 'updateUrl not configured (settings.json)',
+    checkFailed: 'Update check failed',
     phaseStopped: 'Stopped', phaseStarting: 'Starting', phaseInstalling: 'Installing', phaseRunning: 'Running', phaseError: 'Error',
   },
 };
@@ -343,43 +347,158 @@ function runNpmAsync(args, timeoutMs = 600000, onLine) {
   });
 }
 function curlJsonAsync(url) {
-  return new Promise((resolve) => {
-    try {
-      const proc = spawn('curl.exe', ['-sS', '-L', '--max-time', '20', '-H', 'Accept: application/vnd.npm.install-v1+json', url], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
-      let out = '';
-      proc.stdout.on('error', () => { });
-      proc.stdout.on('data', (d) => { out += d; });
-      proc.on('error', () => resolve(null));
-      proc.on('close', () => { try { resolve(JSON.parse(out)); } catch { resolve(null); } });
-    } catch { resolve(null); }
-  });
+  // Node http/https fetch with proxy/timeout/redirect support replaces the old
+  // curl.exe spawn: metadata fetching no longer depends on curl being present
+  // (missing/blocked curl used to silently empty the dsh version list and the
+  // app update check). Resolves null on any failure, exactly like before.
+  return core.fetchJson(url, { accept: 'application/vnd.npm.install-v1+json', timeoutMs: 20000 });
 }
 function semverDesc(a, b) { return core.semverDesc(a, b); }
+/** Directory holding the shipped first-run seed (package.json + package-lock.json). */
+function runtimeSeedDir() {
+  // Packaged client: extraResources copy under resources/runtime. Dev (`npm
+  // start`, resourcesPath === ''): the repo copy next to this file.
+  return process.resourcesPath
+    ? join(process.resourcesPath, 'runtime')
+    : join(__dirname, 'resources', 'runtime');
+}
+/** dsh version pinned by the seeded package-lock.json ('' when absent/invalid). */
+function lockedDshVersion() {
+  try {
+    const lock = JSON.parse(fs.readFileSync(join(RUNTIME_DIR, 'package-lock.json'), 'utf8'));
+    const p = lock.packages && lock.packages['node_modules/@deepseek-ai/dsh'];
+    return (p && typeof p.version === 'string') ? p.version : '';
+  } catch { return ''; }
+}
 async function ensureRuntimeDsh() {
-  if (fs.existsSync(runtimeBin())) return true;
+  if (fs.existsSync(runtimeBin())) return { ok: true };
   const ver = settings.dshVersion || 'latest';
   log('installing managed dsh runtime:', ver);
-  const r = await runNpmAsync(['install', '--prefix', RUNTIME_DIR, '--no-audit', '--no-fund', '@deepseek-ai/dsh@' + ver]);
+  // The SAME registry resolution as dashboard update/rollback: env override ->
+  // settings.json npmRegistry -> zh users default to the npmmirror mirror.
+  // First-run auto-install against the official registry hangs on slow CN
+  // routes (tarball downloads stall and npm times out), which is how fresh
+  // installs end up stuck on "dsh bin not found".
+  const registry = npmRegistryOverride();
+  // Seed a known-good package.json + package-lock.json when desktop-runtime is
+  // missing. WITHOUT a lock, npm 11 spends 10+ minutes (usually past the app's
+  // install timeout) resolving this ~500-package, peer-dense dsh tree and then
+  // stalls CPU-bound before downloading a single tarball; WITH the seeded lock
+  // the identical tree installs in under a minute (measured ~30s on a mirror).
+  const seed = runtimeSeedDir();
+  const lockPath = join(RUNTIME_DIR, 'package-lock.json');
+  if (!fs.existsSync(lockPath) && fs.existsSync(join(seed, 'package-lock.json'))) {
+    try {
+      fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+      fs.copyFileSync(join(seed, 'package.json'), join(RUNTIME_DIR, 'package.json'));
+      fs.copyFileSync(join(seed, 'package-lock.json'), lockPath);
+      log('seeded dsh runtime manifest (package.json + package-lock.json) from app resources');
+    } catch (e) { log('dsh runtime seed failed:', e && e.message); }
+  }
+  // --ignore-scripts: koffi / node-pty ship platform prebuilds (verified), and
+  // their postinstall steps invoke a bare `node` - which does not exist on a
+  // machine without Node (the app runs npm under Electron-as-Node there), so
+  // running lifecycle scripts would fail the whole install.
+  const common = ['--prefix', RUNTIME_DIR, '--no-audit', '--no-fund', '--ignore-scripts', '--fetch-timeout=120000', '--fetch-retries=1', '--loglevel=http'];
+  const registryArgs = [];
+  if (registry) { registryArgs.push('--registry=' + registry); log('dsh auto-install using npm registry:', registry); }
+  else log('dsh auto-install using npm registry: official (default)');
+  // `npm ci` installs exactly the seeded lock - deterministic and fast. It is
+  // used when no explicit version is pinned ('latest' means "what the shipped
+  // manifest provides" for first boot; the dashboard update path moves to
+  // newer versions afterwards). An explicit pinned version outside the lock
+  // falls back to `npm install @deepseek-ai/dsh@<ver>`.
+  const locked = lockedDshVersion();
+  const useCi = fs.existsSync(lockPath) && (ver === 'latest' || ver === locked);
+  const npmArgs = (useCi ? ['ci'] : ['install'])
+    .concat(common).concat(registryArgs)
+    .concat(useCi ? [] : ['@deepseek-ai/dsh@' + ver]);
+  log('dsh runtime install mode:', useCi ? 'npm ci (seeded lock, locked ' + locked + ')' : 'npm install @' + ver);
+  // Live progress for the first-boot install too (not just dashboard update):
+  // parse npm's http log line by line and broadcast the same dshInstallProgress
+  // channel the dashboard renders, throttled to 150ms.
+  const acc = { phase: 'fetch', fetched: 0 };
+  let lastPush = 0;
+  const push = (force) => {
+    const now = Date.now();
+    if (force || now - lastPush > 150) {
+      lastPush = now;
+      dshInstallProgress = { phase: acc.phase, fetched: acc.fetched, version: ver };
+      broadcastStatus();
+    }
+  };
+  // 20 min headroom: the seeded fast path normally finishes in ~1 min, but a
+  // cold mirror cache on a slow connection (or a genuine re-resolution) needs
+  // room; npm's own fetch attempts are bounded above.
+  const r = await runNpmAsync(npmArgs, 1200000, (line) => { core.npmProgressLine(line, acc); push(false); });
+  dshInstallProgress = null;
+  broadcastStatus();
   log('managed dsh install exit', r.status, r.error || r.err || '');
-  return fs.existsSync(runtimeBin());
+  if (fs.existsSync(runtimeBin())) return { ok: true };
+  // A real, actionable reason for the error card: npm-cli missing / install
+  // timeout / npm exit code with the tail of its stderr - never a bare
+  // "bin not found" that hides what actually failed.
+  let errText = '';
+  if (r && r.error) errText = String(r.error);
+  else if (r && typeof r.status === 'number' && r.status !== 0) {
+    const tail = String(r.err || '').trim().split('\n').slice(-4).join(' ').slice(0, 200);
+    errText = 'npm exit ' + r.status + (tail ? ': ' + tail : '');
+  } else errText = 'unknown error (see desktop.log)';
+  return { ok: false, error: errText };
+}
+/**
+ * Make sure the managed dsh runtime bin exists before the server is spawned:
+ * first run installs it, and a FAILED install (network timeout, npm-cli
+ * missing, unreachable mirror...) is retried here instead of looping on the
+ * bare "bin not found" spawn error. Sets phase/error itself; returns true
+ * only when the bin is available afterwards.
+ */
+async function ensureRuntimeReady() {
+  if (core.resolveDshBin(DSH_HOME)) return true;
+  setPhase('installing');
+  const r = await ensureRuntimeDsh();
+  if (r.ok) return true;
+  lastError = `${T.runtimeInstallFailed}${SEP.colon}${r.error}`;
+  setPhase('error');
+  return false;
+}
+/** Start the server; when the runtime bin is missing, install it first. */
+async function startServerSafely() {
+  if (await ensureRuntimeReady()) startServer();
 }
 function currentDshVersion() {
   try { return JSON.parse(fs.readFileSync(join(RUNTIME_DIR, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), 'utf8')).version; }
   catch { return null; }
+}
+/**
+ * Metadata URL for the dsh package, mirror-aware. Previously hardcoded to the
+ * official registry, which ignored the npm mirror toggle (env > settings >
+ * zh-default npmmirror) and made version list/latest fail or time out for
+ * mirror users. The exact URL construction lives in lib/core.js (pure,
+ * unit-tested) so the mirror switch and metadata enum can never drift apart.
+ */
+function dshMetadataUrl() {
+  return core.registryMetadataUrl(npmRegistryOverride(), '@deepseek-ai/dsh');
 }
 async function latestDshVersion() {
   // The bare /latest endpoint is unreliable; derive it from the metadata
   // document (same source as listDshVersions). The package only ships
   // prerelease tags (0.1.0-rc.x), so no "-" filtering: semverDesc ordering
   // handles stable-vs-prerelease precedence by itself.
-  const j = await curlJsonAsync('https://registry.npmjs.org/@deepseek-ai/dsh');
-  if (!j || !j.versions) return null;
+  const j = await curlJsonAsync(dshMetadataUrl());
+  if (!j || !j.versions) {
+    log('dsh metadata fetch failed (offline/unreachable registry); latest version unknown');
+    return null;
+  }
   const keys = Object.keys(j.versions);
   return keys.length > 0 ? keys.sort(semverDesc)[0] : null;
 }
 async function listDshVersions() {
-  const j = await curlJsonAsync('https://registry.npmjs.org/@deepseek-ai/dsh');
-  if (!j || !j.versions) return [];
+  const j = await curlJsonAsync(dshMetadataUrl());
+  if (!j || !j.versions) {
+    log('dsh metadata fetch failed (offline/unreachable registry); version list unavailable');
+    return [];
+  }
   return Object.keys(j.versions).sort(semverDesc);
 }
 async function updateDsh(ver) {
@@ -409,23 +528,58 @@ async function updateDsh(ver) {
   // (DSH_NPM_REGISTRY) or settings.json (npmRegistry, editable in the
   // dashboard) so users can point at a mirror without touching .npmrc.
   const registry = npmRegistryOverride();
-  const npmArgs = ['install', '--prefix', RUNTIME_DIR, '--no-audit', '--no-fund', '--loglevel=http'];
+  // --ignore-scripts: koffi / node-pty ship platform prebuilds; their
+  // postinstall steps call a bare `node`, absent on machines without Node
+  // (the app itself drives npm via Electron-as-Node there). Running scripts
+  // would fail every update on such machines.
+  // A fixed --cache plus --prefer-offline lets npm reuse already-downloaded
+  // tarballs across update/rollback (and after a wiped runtime dir), so a
+  // second update or a rollback no longer re-resolves the whole ~500-package
+  // tree from scratch. fetch-timeout/retries align the net-failure feedback
+  // with the first-install path instead of waiting for the 900s outer timeout.
+  const npmArgs = ['install', '--prefix', RUNTIME_DIR, '--no-audit', '--no-fund', '--ignore-scripts', '--loglevel=http',
+    '--cache', join(DSH_HOME, 'npm-cache'), '--prefer-offline', '--fetch-timeout=120000', '--fetch-retries=1'];
   if (registry) { npmArgs.push('--registry=' + registry); log('dsh update using npm registry:', registry); }
   npmArgs.push('@deepseek-ai/dsh@' + ver);
-  const r = await runNpmAsync(npmArgs, 600000, (line) => { core.npmProgressLine(line, acc); push(false); });
+  const r = await runNpmAsync(npmArgs, 900000, (line) => { core.npmProgressLine(line, acc); push(false); });
   dshInstallProgress = null;
   log('dsh version change exit', r.status, r.error || r.err || '');
-  if (r.status === 0) { settings.dshVersion = ver; saveSettings(); if (phase === 'running') restartServer(); }
+  if (r.status === 0) {
+    settings.dshVersion = ver; saveSettings();
+    // npm >=7 always writes/updates <prefix>/package-lock.json, but verify and
+    // record it: a persisted lock is what makes the next reinstall/rollback
+    // take the fast `npm ci` path in ensureRuntimeDsh (lockedDshVersion scan).
+    if (fs.existsSync(join(RUNTIME_DIR, 'package-lock.json'))) {
+      log('dsh version change: package-lock.json persisted at', ver, '(fast reinstall/rollback enabled)');
+    } else {
+      log('dsh version change: package-lock.json missing after install (npm did not write a lock; slow path on next reinstall)');
+    }
+    if (phase === 'running') restartServer();
+  }
   broadcastStatus();
   return r.status === 0;
 }
 
 // --- npm registry override -----------------------------------
-// A mirror is honored from env (DSH_NPM_REGISTRY) or settings.json
-// (npmRegistry, editable from the dashboard) and passed to npm as
-// --registry=<url>. Empty string means "use npm's default (official)".
+// Which registry drives `npm install` for the dsh runtime - first-run
+// auto-install AND dashboard update/rollback. The official registry's
+// tarball route is near-unusable behind slow CN networks (installs hang and
+// time out at 600s), so precedence is:
+//   1. env DSH_NPM_REGISTRY
+//   2. settings.json npmRegistry (editable from the dashboard); '' = official
+//   3. zh users (web locale preference / Windows display language) default to
+//      the npmmirror mirror; everyone else defaults to the official registry
+// The returned value is passed to npm as --registry=<url>; '' means "npm's
+// default (official)" and the flag is omitted.
+const DEFAULT_NPM_MIRROR = 'https://registry.npmmirror.com';
 function npmRegistryOverride() {
-  return process.env.DSH_NPM_REGISTRY || (typeof settings.npmRegistry === 'string' && settings.npmRegistry.trim()) || '';
+  const envR = (process.env.DSH_NPM_REGISTRY || '').trim();
+  if (envR) return envR;
+  if (Object.prototype.hasOwnProperty.call(settings, 'npmRegistry')) {
+    // Explicit choice (persisted by the dashboard toggle): '' means official.
+    return (typeof settings.npmRegistry === 'string' ? settings.npmRegistry : '').trim();
+  }
+  return IS_ZH ? DEFAULT_NPM_MIRROR : '';
 }
 
 // --- phase / status ------------------------------------------
@@ -457,7 +611,14 @@ function stopServer() {
 function spawnServer(port) {
   const node = core.resolveNode();
   const bin = core.resolveDshBin(DSH_HOME);
-  if (!bin) { lastError = 'dsh bin not found'; setPhase('error'); return null; }
+  if (!bin) {
+    // Keep a more specific error already on record (e.g. "dsh 运行时安装失败:
+    // <reason>"); only fall back to the generic message otherwise. Without
+    // this, a failed runtime install would be masked as a bare bin-not-found.
+    if (!lastError) lastError = T.binNotFound;
+    setPhase('error');
+    return null;
+  }
   const env = { ...process.env, DSH_HOME };
   if (node.electronAsNode) env.ELECTRON_RUN_AS_NODE = '1';
   const args = [bin, '--profile', 'web', '--host', '127.0.0.1', '--port', String(port)];
@@ -593,7 +754,14 @@ function restartServer() {
   lastError = null;
   crashCount = 0; // a manual restart is a fresh start: reset the backoff budget
   stopServer();
-  setTimeout(() => { setPhase('stopped'); startServer(); }, 700);
+  setTimeout(async () => {
+    setPhase('stopped');
+    // Splash "Retry" lands here after a failed start; when the runtime bin is
+    // missing (failed first install / wiped runtime dir) re-run the install
+    // instead of looping on "bin not found" forever.
+    if (!(await ensureRuntimeReady())) return;
+    startServer();
+  }, 700);
 }
 
 // --- first-run curated plugins -------------------------------
@@ -773,7 +941,7 @@ function updateTrayMenu() {
     { label: T.open, click: showMain },
     { label: T.dashboard, click: showDashboard },
     { type: 'separator' },
-    { label: phase === 'running' ? T.restart : T.start, click: () => { if (phase === 'running') restartServer(); else startServer(); } },
+    { label: phase === 'running' ? T.restart : T.start, click: () => { if (phase === 'running') restartServer(); else startServerSafely(); } },
     { type: 'separator' },
     { label: 'DeepSeek Harness - ' + phaseName(phase), enabled: false },
     { type: 'separator' },
@@ -1165,9 +1333,12 @@ function handleNotifyUrl(raw) {
 // (update-url.json, added to the asar), so end users never configure
 // anything. An advanced override stays possible via settings.json:
 // `"updateUrl": "https://.../dsh-update.json"`.
-// Manifest shape: { "version": "0.1.1", "url": "https://.../Setup.exe" }.
+// Manifest shape: { "version": "x.y.z", "url": "https://.../Setup.exe",
+// "sha512": "<base64>", "size": <bytes> }. sha512/size are written by
+// make-release.mjs and verified on download in downloadUpdate().
 let builtinUpdateUrl = '';
 try { builtinUpdateUrl = JSON.parse(fs.readFileSync(join(__dirname, 'update-url.json'), 'utf8')).url || ''; } catch { }
+let pendingInstallExe = null; // set when a downloaded update is cleared to install on quit
 async function checkForUpdate(manual) {
   const manifestUrl = (typeof settings.updateUrl === 'string' && settings.updateUrl) ? settings.updateUrl : (builtinUpdateUrl || null);
   if (!manifestUrl) {
@@ -1176,21 +1347,28 @@ async function checkForUpdate(manual) {
   }
   updateState = { ...(updateState || {}), checking: true, error: null };
   broadcastStatus();
-  const j = await curlJsonAsync(manifestUrl);
-  const ver = j && typeof j.version === 'string' ? j.version : null;
-  const url = j && typeof j.url === 'string' ? j.url : null;
+  const j = await curlJsonAsync(manifestUrl); // core.fetchJson: proxy/timeout/redirect, no curl.exe
+  const m = core.parseUpdateManifest(j);
+  const ver = m ? m.version : null;
+  const url = m ? m.url : null;
+  // core.fetchJson (and thus curlJsonAsync) resolves null on transport failure,
+  // timeout, or non-2xx. That must NOT masquerade as "you are on the latest".
+  const fetchFailed = j === null || j === undefined;
   updateState = {
     ...(updateState || {}), checking: false,
-    available: !!(ver && url && semverDesc(ver, app.getVersion()) < 0),
-    version: ver || null, url: url || null, error: null,
+    available: !!(m && semverDesc(ver, app.getVersion()) < 0),
+    version: ver, url: url,
+    sha512: m ? m.sha512 : '', size: m ? m.size : 0,
+    error: fetchFailed ? T.checkFailed : ((j && !m) ? 'invalid update manifest' : null),
   };
   broadcastStatus();
-  if (ver && url && semverDesc(ver, app.getVersion()) < 0) {
+  if (m && semverDesc(ver, app.getVersion()) < 0) {
     // Manual check -> user asked, always report; background check -> quiet
     // while the user is watching (foreground suppression applies).
     notifyService('DeepSeek Harness', `${T.updateAvailable}${SEP.colon}${app.getVersion()} → ${ver}`, manual);
   } else if (manual) {
-    notifyService('DeepSeek Harness', `${T.version} ${app.getVersion()}`, true);
+    if (fetchFailed || !m) notifyService('DeepSeek Harness', T.checkFailed, true);
+    else notifyService('DeepSeek Harness', `${T.version} ${app.getVersion()}`, true);
   }
 }
 function downloadUpdate() {
@@ -1203,39 +1381,55 @@ function downloadUpdate() {
   const target = join(dir, name);
   updateState = { ...u, downloading: true, error: null };
   broadcastStatus();
-  return new Promise((resolve) => {
-    const args = ['-sS', '-L', '--max-time', '900', '-o', target];
-    // Direct GitHub downloads frequently fail behind CN network routes; pick
-    // up a usable proxy from env vars or the common local port so the
-    // installer download actually completes.
-    const proxy = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY || '';
-    const useProxy = proxy || (process.env.DSH_UPDATE_PROXY || '');
-    if (useProxy) args.push('-x', useProxy);
-    args.push(u.url);
-    const proc = spawn('curl.exe', args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    let err = '';
-    proc.stderr.on('data', (d) => { err += d; });
-    proc.on('error', (e) => {
-      updateState = { ...updateState, downloading: false, error: String(e && e.message || e) };
-      broadcastStatus(); resolve({ ok: false, error: updateState.error });
-    });
-    proc.on('exit', (code) => {
-      const ok = code === 0 && fs.existsSync(target);
-      updateState = { ...updateState, downloading: false, downloadedPath: ok ? target : null, error: ok ? null : (err || 'download failed') };
+  // Node streaming downloader replaces the old curl.exe spawn: honors proxy
+  // env vars, follows redirects, and returns the real reason on non-2xx /
+  // timeout / transport failure instead of a bare "download failed".
+  return core.downloadTo(u.url, target, { timeoutMs: 900000, proxy: core.resolveProxy() }).then(async (r) => {
+    if (!r.ok) {
+      updateState = { ...updateState, downloading: false, error: r.error };
       broadcastStatus();
-      if (ok) {
-        notifyService('DeepSeek Harness', `${T.downloadReady}${SEP.colon}${target}`);
-        shell.showItemInFolder(target);
-      }
-      resolve({ ok, path: ok ? target : null });
-    });
+      return { ok: false, error: r.error };
+    }
+    // Integrity BEFORE we offer to install: refuse a corrupted / tampered
+    // payload when the manifest carries size and/or sha512 (new manifest
+    // fields produced by make-release.mjs). Delete the bad file so a stale
+    // partial download can never be installed later.
+    let integrityError = null;
+    if (u.size > 0 && r.size !== u.size) {
+      integrityError = `size mismatch (expected ${u.size}, got ${r.size})`;
+    } else if (u.sha512) {
+      const actual = await core.fileSha512(target);
+      if (!actual) integrityError = 'could not compute sha512';
+      else if (actual !== u.sha512) integrityError = 'sha512 mismatch';
+    }
+    if (integrityError) {
+      try { fs.rmSync(target, { force: true }); } catch { }
+      updateState = { ...updateState, downloading: false, error: integrityError };
+      broadcastStatus();
+      return { ok: false, error: integrityError };
+    }
+    updateState = { ...updateState, downloading: false, downloadedPath: target, error: null };
+    broadcastStatus();
+    notifyService('DeepSeek Harness', `${T.downloadReady}${SEP.colon}${target}`);
+    shell.showItemInFolder(target);
+    return { ok: true, path: target };
   });
 }
 function installUpdate() {
   const p = updateState && updateState.downloadedPath;
   if (!p || !fs.existsSync(p)) return false;
-  try { spawn(p, [], { detached: true, stdio: 'ignore' }).unref(); return true; }
-  catch { return false; }
+  // Never spawn the installer while this app still holds the exe lock. Mark a
+  // pending install and QUIT: the existing wantQuit + single-instance-lock
+  // quit path winds down the windows/server, then will-quit spawns the NSIS
+  // installer with /S (silent wizard). No second app instance is created, no
+  // zombie is left behind, and the update needs no manual clicks.
+  log('update: scheduling silent install on quit:', p);
+  pendingInstallExe = p;
+  updateState = { ...(updateState || {}), error: null };
+  broadcastStatus();
+  wantQuit = true;
+  app.quit();
+  return true;
 }
 
 // --- diagnostics export --------------------------------------
@@ -1297,7 +1491,13 @@ function statusPayload() {
 }
 function registerIpc() {
   ipcMain.handle('status:get', (e) => trustedSender(e) ? statusPayload() : null);
-  ipcMain.handle('server:start', (e) => { if (trustedSender(e) && (phase === 'stopped' || phase === 'error')) startServer(); });
+  ipcMain.handle('server:start', async (e) => {
+    if (trustedSender(e) && (phase === 'stopped' || phase === 'error')) {
+      // A missing runtime bin (failed first install) is reinstalled first, so
+      // "start" never dead-ends on the "bin not found" error card.
+      await startServerSafely();
+    }
+  });
   ipcMain.handle('server:restart', (e) => { if (trustedSender(e)) restartServer(); });
   ipcMain.handle('app:openBrowser', (e) => { if (trustedSender(e) && serverUrl) safeOpen(serverUrl); });
   ipcMain.handle('app:openLogs', (e) => { if (trustedSender(e)) { try { shell.openPath(join(app.getPath('userData'), 'logs')); } catch { } } });
@@ -1380,13 +1580,13 @@ if (!gotLock) {
     } catch (e) { log('global hotkey registration failed:', e.message); }
     // First run (no dsh bin anywhere): install the managed runtime and WAIT -
     // the server cannot start without a bin. Later runs skip this instantly.
+    // On failure the REAL reason (registry timeout / npm-cli missing / exit
+    // code) stays on the error card - the spawnServer "bin not found" guard
+    // only fires when no better error is on record - and splash "Retry"
+    // re-runs this install via ensureRuntimeReady().
     if (!core.resolveDshBin(DSH_HOME)) {
-      setPhase('installing');
-      const installed = await ensureRuntimeDsh();
-      if (!installed) {
-        lastError = 'dsh runtime install failed (see logs)';
-        setPhase('error');
-      }
+      const ready = await ensureRuntimeReady();
+      if (!ready) log('dsh runtime missing after install attempt; error card shown (Retry reinstalls)');
     }
     // Phase 1 of curated provisioning: the bootstrap (dshmarket) must be
     // installed BEFORE the server boots (it is a bundle layer). Skipped
@@ -1422,6 +1622,24 @@ if (!gotLock) {
     }
   });
   app.on('before-quit', () => { wantQuit = true; });
-  app.on('will-quit', () => { stopServer(); try { globalShortcut.unregisterAll(); } catch { } });
+  app.on('will-quit', () => {
+    stopServer();
+    try { globalShortcut.unregisterAll(); } catch { }
+    // Self-update: the quit has now wound down the windows/server, so our own
+    // exe lock is about to be released. Spawn the NSIS installer SILENTLY
+    // ("/S") detached+unref: it survives this process exit (no zombie) and the
+    // installer's runAfterFinish (electron-builder default) relaunches the app
+    // at the new version.
+    if (pendingInstallExe) {
+      const p = pendingInstallExe;
+      pendingInstallExe = null;
+      log('update: running silent installer (/S):', p);
+      try {
+        spawn(p, core.silentInstallArgs(), { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+      } catch (e) {
+        log('update: silent installer spawn failed:', e && e.message);
+      }
+    }
+  });
   app.on('window-all-closed', () => { /* tray-resident */ });
 }
