@@ -14,7 +14,7 @@ Before opening a pull request:
    npm test
    ```
 
-4. UI changes: self-check with the offscreen previews (see README "UI 自检").
+4. UI changes: self-check with the offscreen previews (`npx electron preview.js`).
 5. Update `CHANGELOG.md` for user-visible changes.
 
 ## Report a bug

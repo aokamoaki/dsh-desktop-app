@@ -6,15 +6,6 @@
 
 原生桌面客户端（Electron 壳）——把 `dsh web` 装进独立窗口 + 系统托盘，开箱即用。
 
-## ✨ 特性
-
-- 🪟 **原生桌面体验**：无边框窗口 + 自绘标题栏，独立 `WebContentsView` 加载 `dsh web`（sandbox 隔离）；系统托盘 + 全局 `Ctrl+Alt+H` 随时唤起，点 × 隐藏后台运行
-- 🛡️ **稳定可靠**：spawn 前运行 [dsh-startup-guard](https://github.com/aokamoaki/dsh-startup-guard) 体检；attach 已运行实例防双写 `~/.dsh`；崩溃指数退避自动重启并通知
-- 📊 **一站式仪表盘**：服务状态 / 启动体检 / dsh 版本更新·回滚 / 应用更新 / 开机自启 / 一键诊断导出
-- 🔔 **通知闭环**：`dsh-notify://` 协议唤起窗口；对话通知仅后台触发（ask/approval 始终提醒）
-- 🚀 **自更新**：manifest 内置、启动后台检查（`settings.json` 可覆盖 updateUrl）
-- 📦 **开箱即用**：精选插件首启安装一次（缺失安全）；中英双语跟随主程序，数据完全复用 `%USERPROFILE%\.dsh`，既有插件、凭据、会话零迁移
-
 ## 🚀 使用
 
 ```bash
@@ -24,27 +15,6 @@ npm start              # 启动客户端
 npm run smoke          # 冒烟模式：attach 后打印 SMOKE_OK 退出
 npm run dist           # 打包（NSIS 安装版 + 免安装版）
 ```
-
-> **构建前置**：`resources/npm/` 须先执行 `npm run provision:npm` 生成（已被 `.gitignore` 忽略、不进库）；「首装种子锁」`resources/runtime/package.json` + `package-lock.json` **必须 git add 入库**——全新机器首次安装依赖它走 `npm ci` 快速路径（约 30s），缺失会退化为全量依赖解析（10 分钟以上）。
-
-## 🏗️ 结构
-
-```
-main.js / preload.js / lib/core.js（纯逻辑，可单测）/ ui/ / notifier/ / curated.json / guard-runner.mjs
-```
-
-测试：`npm test`（`lib/core` 单元测试）；UI 自检：`npx electron preview.js` 离屏截图；打包验证：`dist\win-unpacked\dsh-desktop-app.exe --smoke`。
-
-## 📦 发布
-
-```bash
-npm run provision:npm && npm run dist   # 1. 构建安装包
-node make-release.mjs --repo=aokamoaki/dsh-desktop-app --version=x.y.z  # 2. 生成发布 manifest（dsh-update.json + update-url.json；省略 --version= 则读 package.json）
-gh release create vx.y.z dist\DeepSeek-Harness-Setup-x.y.z.exe dsh-update.json  # 3. 上传 Release
-npm run dist                            # 4. 重新打包（把更新地址打进应用）→ 分发
-```
-
-> `make-release.mjs` 会在 `dsh-update.json` 写入安装包的 `sha512` + `size` 完整性字段；客户端下载完成后校验二者，篡改/损坏会被拒绝。`--repo` 必须是真实仓库，否则内置更新地址 404；未签名的安装包在其他机器上会触发 SmartScreen「未知发布者」提示（功能不受影响，正式分发建议购买代码签名证书）。运行时安装/更新/回滚与自更新的行为、npm 镜像、升级后自证方法见 [`docs/delivery.md`](docs/delivery.md)。
 
 ## 🔌 与插件的关系
 
