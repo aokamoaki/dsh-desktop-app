@@ -135,3 +135,22 @@ git push origin main
 
 提交前自检：`git status --short` 应只列出上述要提交的文件（`dsh-update.json` 与
 `update-url.json` 不应出现，二者被忽略；无凭据/密钥/私钥等敏感文件）。
+
+## 9. 精选插件安装与 pnpm 供给
+
+精选插件（`curated.json`）**不是**随包绑定的，而是首启联网现装：Phase 1 直装
+`dshmarket`（bootstrap），Phase 2 经 market API（dshmarket 的 `/dsh-market/install`）
+装其余插件，失败回退直装。两者最终都落到 `dsh plugin add`，而它在 dsh 运行时里是
+**pnpm 转发器**（`spawnSync("pnpm", ...)`）。
+
+- 全新（无 Node）机器既无 pnpm 也无可安装 pnpm 的环境，所有插件安装秒退 `127`
+  （`pnpm not found on PATH`）且静默重试——即「别人下载后插件不装」的根因。
+- **修复**（`main.js`）：启动时 `ensurePnpm()` 用内置 npm + 镜像链把独立版
+  `@pnpm/exe`（内嵌 Node）装进 `~/.dsh/pnpm`，前置其目录到 `process.env.PATH`，并把
+  镜像写入 `process.env.npm_config_registry`；`dsh` server 进程与市场内 pnpm 一并继承。
+- 直装加 10 分钟超时（杀进程树），失败写 desktop.log 尾部并弹一次通知；
+  `curatedDone` 仅在全部成功时置位（否则下次启动重试）。
+
+> 尚待处理：`curated.json` 里 `dsh-notify` / `dsh-token-usage` /
+> `dsh-chat-timeline` 为 `github:` spec（需 git + 直连 GitHub），无 git / 无法直连
+> GitHub 的环境仍会失败；后续可改走 gh 代理或 npm 发布版。

@@ -2,6 +2,14 @@
 
 本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
 
+## [Unreleased]
+
+- 修复：精选插件首启自动安装与手动 `dsh plugin add` 在全新（无 Node）机器上全部失败——dsh 运行时的 `plugin add` 是 pnpm 转发器（`spawnSync("pnpm", ...)`），而安装包只内置 npm、未内置 pnpm，普通用户机器既无 pnpm 也无 Node，导致 dshmarket bootstrap 与其余精选插件全部秒退（exit 127 `pnpm not found`）、且每次启动静默重试
+  - 首启 `ensurePnpm()`：用内置 npm（Electron-as-Node）+ 同一镜像链（`DSH_NPM_REGISTRY` > `settings.npmRegistry` > 中文默认 npmmirror）把独立版 `@pnpm/exe`（内嵌 Node、无需系统 Node）装进 `~/.dsh/pnpm`，再把其目录前置进 `process.env.PATH`——首启自动装、market 内部 pnpm、以及凡经 App 拉起的 `dsh plugin add` 均能找到 pnpm
+  - 镜像下放：镜像链结果写入 `process.env.npm_config_registry`，pnpm 与 market 内部安装同样走镜像，不再回落到官方源
+  - 精选插件直装加 10 分钟超时并杀进程树（不再因网络卡死无限阻塞启动）；stderr 尾部记入 desktop.log，可见 `pnpm not found` 等真实原因，而非一句 `exit 127`
+  - 精选插件自动装失败时弹一次通知，不再完全静默
+
 ## [1.0.7] - 2026-09-03
 
 - 修复：全新机器首次运行即报「dsh bin not found」且无法恢复——首启自动安装 dsh 运行时打官方 registry，在慢速/受限网络（如国内直连）下 tarball 下载卡死，npm 超时被杀，安装失败；随后真实原因又被误导性的 `dsh bin not found` 覆盖，「重试」又只重启服务、从不重装运行时，用户永久卡在错误页
