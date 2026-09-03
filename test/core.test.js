@@ -562,3 +562,41 @@ describe('proxy support (self-contained, no bundled deps)', () => {
     } finally { proxy.close(); }
   });
 });
+
+describe('resolvePnpm (standalone pnpm for dsh plugin add)', () => {
+  function mkPnpm(fileName) {
+    const root = tmpdir();
+    const exeDir = path.join(root, 'node_modules', '@pnpm', 'exe');
+    fs.mkdirSync(exeDir, { recursive: true });
+    const exe = path.join(exeDir, fileName);
+    fs.writeFileSync(exe, 'fake');
+    return { root, exe };
+  }
+
+  test('resolves the standalone windows binary under @pnpm/exe', () => {
+    const { root, exe } = mkPnpm('pnpm.exe');
+    assert.equal(core.resolvePnpm(root), exe);
+  });
+
+  test('resolves the posix standalone binary', () => {
+    const { root, exe } = mkPnpm('pnpm');
+    assert.equal(core.resolvePnpm(root), exe);
+  });
+
+  test('env override DSH_DESKTOP_PNPM wins', () => {
+    const override = path.join(tmpdir(), 'custom-pnpm.exe');
+    fs.writeFileSync(override, 'x');
+    const prev = process.env.DSH_DESKTOP_PNPM;
+    process.env.DSH_DESKTOP_PNPM = override;
+    try {
+      assert.equal(core.resolvePnpm(undefined), override);
+    } finally {
+      if (prev === undefined) delete process.env.DSH_DESKTOP_PNPM; else process.env.DSH_DESKTOP_PNPM = prev;
+    }
+  });
+
+  test('returns null when nothing is installed', () => {
+    assert.equal(core.resolvePnpm(tmpdir()), null);
+    assert.equal(core.resolvePnpm(''), null);
+  });
+});

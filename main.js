@@ -12,7 +12,7 @@
 const { app, BrowserWindow, WebContentsView, Tray, Menu, nativeImage, nativeTheme, shell, ipcMain, Notification, clipboard, screen, globalShortcut } = require('electron');
 const { spawn, spawnSync } = require('node:child_process');
 const { homedir } = require('node:os');
-const { join, basename } = require('node:path');
+const { join, basename, dirname, delimiter } = require('node:path');
 const http = require('node:http');
 const fs = require('node:fs');
 const core = require('./lib/core.js');
@@ -22,6 +22,7 @@ const DEMO = process.argv.includes('--demo');
 const DSH_HOME = process.env.DSH_HOME || join(homedir(), '.dsh');
 const PROFILE_DIR = join(DSH_HOME, 'profiles', 'web');
 const RUNTIME_DIR = join(DSH_HOME, 'desktop-runtime');
+const PNPM_DIR = join(DSH_HOME, 'pnpm');
 const PORT = Number(process.env.DSH_DESKTOP_PORT || 3080);
 const INDEX_MARKER = 'DeepSeek Harness';
 const URL_PREFIX = 'dsh web: http://127.0.0.1:';
@@ -56,6 +57,7 @@ const L = {
     crashN: '崩溃', secLater: '秒后自动重启', crashAfter: '次重启后仍失败',
     diagExported: '诊断包已导出', diagExportFailed: '诊断包导出失败',
     curInstall: '正在安装精选插件', curDone: '精选插件安装完成', curSkip: '精选插件已就绪',
+    curFail: '部分精选插件未能自动安装，重启后会自动重试（可在日志/诊断里查看原因）',
     guardOk: '启动体检通过', guardAuto: '已自动禁用损坏插件', guardFixed: '自动修复',
     attach: '已连接运行中的服务', starting: '正在启动服务...', installingRuntime: '正在安装 dsh 运行时...',
     ready: '就绪', failedToStart: '启动失败', retry: '重试',
@@ -81,6 +83,7 @@ const L = {
     crashN: 'crash', secLater: 's · auto-restarting in', crashAfter: 'after restarts',
     diagExported: 'Diagnostics exported', diagExportFailed: 'Failed to export diagnostics',
     curInstall: 'Installing curated plugins', curDone: 'Curated plugins installed', curSkip: 'Curated plugins ready',
+    curFail: 'Some curated plugins failed to install and will retry on next launch (see logs/diagnostics)',
     guardOk: 'Startup check passed', guardAuto: 'Auto-disabled broken plugin', guardFixed: 'Auto-repaired',
     attach: 'Attached to a running server', starting: 'Starting server...', installingRuntime: 'Installing dsh runtime...',
     ready: 'Ready', failedToStart: 'Failed to start', retry: 'Retry',
@@ -370,6 +373,51 @@ function lockedDshVersion() {
     return (p && typeof p.version === 'string') ? p.version : '';
   } catch { return ''; }
 }
+// Standalone pnpm (Node.js embedded, no system Node needed) install spec, and
+// the max time a single curated plugin's direct install may block startup.
+const PNPM_SPEC = '@pnpm/exe@latest';
+const CURATED_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Prepend a directory onto process.env.PATH once; every child spawn inherits it. */
+function prependToPath(dir) {
+  if (!dir) return;
+  const parts = (process.env.PATH || '').split(delimiter);
+  if (!parts.includes(dir)) process.env.PATH = dir + delimiter + (process.env.PATH || '');
+}
+
+/**
+ * Ensure a runnable `pnpm` exists for `dsh plugin add`. The dsh runtime's
+ * plugin entry (`dsh plugin --profile <name> add <spec>`) is a pnpm forwarder
+ * (`spawnSync("pnpm", ...)`), so every curated auto-install AND every manual
+ * `dsh plugin add` fails on a machine without pnpm. Fresh machines have no
+ * Node, hence no npm/pnpm/corepack: install the standalone @pnpm/exe (Node.js
+ * embedded) through the bundled npm (Electron-as-Node) using the SAME registry
+ * mirror chain as the dsh runtime, then expose its directory on PATH for every
+ * process we spawn (curated installs, the dsh server, and the market it hosts).
+ */
+async function ensurePnpm() {
+  let exe = core.resolvePnpm(PNPM_DIR);
+  if (exe) {
+    log('pnpm (standalone @pnpm/exe) already present:', exe);
+    prependToPath(dirname(exe));
+    return exe;
+  }
+  log('installing standalone pnpm (@pnpm/exe) for dsh plugin add:', PNPM_SPEC);
+  const registry = npmRegistryOverride();
+  const npmArgs = ['install', '--prefix', PNPM_DIR, '--no-audit', '--no-fund', '--ignore-scripts', '--loglevel=http', '--fetch-timeout=120000', '--fetch-retries=1'];
+  if (registry) { npmArgs.push('--registry=' + registry); log('pnpm install using npm registry:', registry); }
+  npmArgs.push(PNPM_SPEC);
+  const r = await runNpmAsync(npmArgs, 600000);
+  exe = core.resolvePnpm(PNPM_DIR);
+  if (exe) {
+    log('pnpm ready:', exe);
+    prependToPath(dirname(exe));
+    return exe;
+  }
+  log('pnpm install failed (npm exit', r && r.status, '); plugin installs will fail visibly', r && r.error || r && r.err || '');
+  return null;
+}
+
 async function ensureRuntimeDsh() {
   if (fs.existsSync(runtimeBin())) return { ok: true };
   const ver = settings.dshVersion || 'latest';
@@ -804,9 +852,25 @@ function runDirectInstall(item) {
     const env = { ...process.env, DSH_HOME };
     if (node.electronAsNode) env.ELECTRON_RUN_AS_NODE = '1';
     const spec = item.spec || item.url;
-    const proc = spawn(node.exe, [bin, 'plugin', '--profile', 'web', 'add', spec], { cwd: PROFILE_DIR, env, windowsHide: true, stdio: 'ignore' });
-    proc.on('error', () => resolve(false));
-    proc.on('exit', (code) => { log('curated direct install', item.name, 'exit', code); resolve(code === 0); });
+    let errTail = '';
+    const proc = spawn(node.exe, [bin, 'plugin', '--profile', 'web', 'add', spec], { cwd: PROFILE_DIR, env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+    if (proc.stderr) proc.stderr.on('data', (d) => { errTail = (errTail + d.toString()).slice(-400); });
+    let settled = false;
+    const finish = (ok) => { if (settled) return; settled = true; clearTimeout(timer); resolve(ok); };
+    // A stalled npm/pnpm/git fetch would otherwise hold the AWAITED bootstrap
+    // (and thus startup) forever; bound it and kill the whole tree.
+    const timer = setTimeout(() => {
+      log('curated direct install', item.name, 'timed out; killing tree');
+      try { core.taskkillTree(proc.pid); } catch { }
+      try { proc.kill(); } catch { }
+      finish(false);
+    }, CURATED_INSTALL_TIMEOUT_MS);
+    proc.on('error', (e) => { log('curated direct install', item.name, 'spawn error:', e && e.code || e && e.message); finish(false); });
+    proc.on('exit', (code) => {
+      const last = errTail.trim().split('\n').pop();
+      log('curated direct install', item.name, 'exit', code, last ? '(' + last.slice(0, 160) + ')' : '');
+      finish(code === 0);
+    });
   });
 }
 /** Install one entry through the market API; the response arrives only when the pnpm run finishes. */
@@ -891,6 +955,10 @@ async function installCuratedViaMarket() {
     log('curated plugins: first-run provisioning complete');
   } else {
     log('curated plugins: some installs failed; will retry on next launch');
+    // A failed pass was previously silent (users saw nothing and plugins just
+    // stayed missing across launches). Surface it so the user knows why plugins
+    // are absent and that a retry will happen on the next launch.
+    notifyService('DeepSeek Harness', T.curFail, true);
   }
 }
 
@@ -1588,6 +1656,13 @@ if (!gotLock) {
       const ready = await ensureRuntimeReady();
       if (!ready) log('dsh runtime missing after install attempt; error card shown (Retry reinstalls)');
     }
+    // Ensure a runnable `pnpm` exists before any curated/plugin install: the
+    // dsh runtime's `plugin add` is a pnpm forwarder and fresh machines have
+    // no Node (hence no pnpm). Install standalone @pnpm/exe via the bundled
+    // npm + mirror, and expose it (plus the mirror) to every child process.
+    await ensurePnpm();
+    const _npmMirror = npmRegistryOverride();
+    if (_npmMirror) process.env.npm_config_registry = _npmMirror;
     // Phase 1 of curated provisioning: the bootstrap (dshmarket) must be
     // installed BEFORE the server boots (it is a bundle layer). Skipped
     // instantly when already provisioned or already present.
