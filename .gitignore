@@ -6,6 +6,10 @@ resources/npm/
 *.tmp
 .DS_Store
 Thumbs.db
+# editors / local environment
+.vscode/
+.idea/
+.env
 # release-generated artifacts (make-release.mjs); regenerate per release
 dsh-update.json
 update-url.json

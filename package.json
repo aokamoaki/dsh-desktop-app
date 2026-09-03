@@ -5,6 +5,14 @@
   "author": "aokamoaki",
   "license": "MIT",
   "description": "DeepSeek Harness desktop client - native window + tray shell for dsh web, with curated first-run plugins",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aokamoaki/dsh-desktop-app.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aokamoaki/dsh-desktop-app/issues"
+  },
+  "homepage": "https://github.com/aokamoaki/dsh-desktop-app#readme",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

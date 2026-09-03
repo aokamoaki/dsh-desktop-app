@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-[![version](https://img.shields.io/badge/version-1.0.2-blue)](package.json) [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![electron](https://img.shields.io/badge/electron-37-47848F)](package.json)
+[![version](https://img.shields.io/badge/version-1.0.8-blue)](package.json) [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![electron](https://img.shields.io/badge/electron-37-47848F)](package.json)
 
 A native desktop client (Electron shell) that wraps `dsh web` in a frameless window + system tray — ready to use out of the box.
 
