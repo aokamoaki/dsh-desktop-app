@@ -132,7 +132,9 @@ describe('resolveGlobalDshBin', () => {
 });
 
 describe('resolvePathDshBin', () => {
-  test('maps a PATH dsh.cmd shim back to its sibling bin.js', () => {
+  // `where` is a Windows built-in; resolvePathDshBin is a graceful no-op (it
+  // returns null) on POSIX, so the shim-mapping behaviour is Windows-only.
+  test('maps a PATH dsh.cmd shim back to its sibling bin.js', { skip: process.platform !== 'win32' }, () => {
     const dir = tmpdir();
     try {
       const bin = fakeBin(path.join(dir, 'node_modules'));
@@ -140,7 +142,11 @@ describe('resolvePathDshBin', () => {
       const prev = process.env.PATH;
       process.env.PATH = dir + path.delimiter + (prev || '');
       try {
-        assert.equal(core.resolvePathDshBin(), bin);
+        const got = core.resolvePathDshBin();
+        assert.ok(typeof got === 'string');
+        // Canonicalize: GitHub's Windows runner reports `where` results with
+        // 8.3 short names (RUNNER~1) that differ from os.tmpdir()'s long form.
+        assert.equal(fs.realpathSync.native(got), fs.realpathSync.native(bin));
       } finally { process.env.PATH = prev; }
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
