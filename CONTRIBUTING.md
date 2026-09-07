@@ -14,9 +14,9 @@ Before opening a pull request:
    npm test
    ```
 
-4. UI changes: self-check with the offscreen previews (`npx electron preview.js`).
+4. UI changes live under `ui/` (titlebar + splash); review them in-app.
 5. Update `CHANGELOG.md` for user-visible changes.
 
 ## Report a bug
 
-Include: app version, `%APPDATA%\dsh-desktop-app\logs\desktop.log` (last lines), and the Dashboard diagnostic export if available. If a startup check auto-disabled a plugin, include the reason comment in the profile's `cordis.patch.yml` and the `repair-backups/` backup.
+Include: app version and `%APPDATA%\dsh-desktop-app\logs\desktop.log` (last lines).

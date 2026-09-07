@@ -74,14 +74,6 @@
     animation: spin .85s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  /* boot stage indicator */
-  .steps { display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 12px; }
-  .steps .step {
-    height: 3px; width: 34px; border-radius: 2px;
-    background: var(--line);
-    transition: background .3s ease;
-  }
-  .steps .step.on { background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
   .err { display: none; color: var(--bad); font-size: 12.5px; margin-bottom: 10px; line-height: 1.5; }
   .err.show { display: block; }
   .buttons { display: none; gap: 8px; justify-content: center; -webkit-app-region: no-drag; margin-top: 2px; }
@@ -100,21 +92,6 @@
     box-shadow: 0 4px 14px rgba(77, 107, 254, .35);
   }
   button.primary:hover { filter: brightness(1.08); background: linear-gradient(135deg, var(--brand), var(--brand-2)); }
-  .guard { display: none; margin-top: 12px; text-align: left; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
-  .guard.show { display: block; }
-  .guard div { margin: 3px 0; display: flex; align-items: center; gap: 6px; }
-  .guard .ok { color: var(--ok); }
-  .guard .warn { color: var(--warn); }
-  .guard .bad { color: var(--bad); }
-  .guard .ic { font-size: 11px; }
-  .curated { display: none; margin-top: 12px; text-align: left; font-size: 11.5px; color: var(--muted); }
-  .curated.show { display: block; }
-  .curated .bar { height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 7px; }
-  .curated .fill {
-    height: 100%; width: 0; border-radius: 3px;
-    background: linear-gradient(90deg, var(--brand), var(--brand-2));
-    transition: width .3s ease;
-  }
   .logbox { display: none; margin-top: 12px; text-align: left; -webkit-app-region: no-drag; }
   .logbox.show { display: block; }
   pre {
@@ -133,19 +110,8 @@
       <div class="logo">DeepSeek <span>Harness</span></div>
     </div>
     <div class="phase" id="phase">starting...</div>
-    <div class="steps" id="steps">
-      <div class="step on" id="step0"></div>
-      <div class="step" id="step1"></div>
-      <div class="step" id="step2"></div>
-      <div class="step" id="step3"></div>
-    </div>
     <div class="spinner" id="spinner"></div>
     <div class="err" id="err"></div>
-    <div class="guard" id="guard"></div>
-    <div class="curated" id="curated">
-      <div id="curtext">Installing curated plugins...</div>
-      <div class="bar"><div class="fill" id="curfill"></div></div>
-    </div>
     <div class="buttons" id="btns">
       <button id="retry" class="primary">Retry</button>
       <button id="browser">Open in Browser</button>

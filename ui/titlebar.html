@@ -152,8 +152,12 @@
     }
     function renderPhase(s) {
       const p = (s && s.phase) || 'stopped';
-      dotEl.className = 'dot' + (p === 'running' ? ' running' : p === 'error' ? ' error' : (p === 'starting' || p === 'installing') ? ' starting' : '');
-      urlEl.textContent = (s && s.url) ? s.url.replace(/^https?:\/\//, '') : '';
+      dotEl.className = 'dot' + (p === 'running' ? ' running' : p === 'error' ? ' error' : (p === 'starting') ? ' starting' : '');
+      // The ready URL carries a launch `?token=`; show only the host:port so the
+      // titlebar never leaks the session token.
+      let host = '';
+      if (s && s.url) { try { host = new URL(s.url).host; } catch { } }
+      urlEl.textContent = host;
     }
     window.dsh.getStatus().then((s) => { renderPhase(s); window.dsh.isMaximized().then(renderMax); });
     window.dsh.onStatus(renderPhase);

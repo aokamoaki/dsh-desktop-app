@@ -1,10 +1,10 @@
 {
   "name": "dsh-desktop-app",
-  "version": "1.0.8",
+  "version": "2.0.0",
   "private": true,
   "author": "aokamoaki",
   "license": "MIT",
-  "description": "DeepSeek Harness desktop client - native window + tray shell for dsh web, with curated first-run plugins",
+  "description": "Lightweight DeepSeek Harness desktop shell - native window + tray wrapping an already-installed dsh web",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aokamoaki/dsh-desktop-app.git"
@@ -18,7 +18,6 @@
     "start": "electron .",
     "smoke": "electron . --smoke",
     "test": "node --test --test-isolation=none test/core.test.js",
-    "provision:npm": "npm install --prefix resources/npm npm@11 --no-audit --no-fund",
     "dist": "electron-builder --win",
     "dist:portable": "electron-builder --win portable"
   },
@@ -34,30 +33,11 @@
     "files": [
       "main.js",
       "preload.js",
-      "curated.json",
-      "guard-runner.mjs",
       "lib/**",
       "assets/**",
-      "notifier/**",
       "ui/**",
-      "package.json",
-      "update-url.json"
+      "package.json"
     ],
-    "asarUnpack": [
-      "notifier/**",
-      "guard-runner.mjs"
-    ],
-    "extraResources": [
-      {
-        "from": "resources/npm",
-        "to": "npm"
-      },
-      {
-        "from": "resources/runtime",
-        "to": "runtime"
-      }
-    ],
-    "afterPack": "scripts/afterPack.cjs",
     "win": {
       "icon": "build/icon.ico",
       "target": [
@@ -76,4 +56,3 @@
     }
   }
 }
-

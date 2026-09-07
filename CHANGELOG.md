@@ -1,6 +1,26 @@
 # Changelog
 
-本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。发布流程见 README「发布流程」：每个发布版本由 `make-release.mjs` 生成 `dsh-update.json` 并随 GitHub Release 上传。
+本应用的版本历史。语义化版本（[SemVer](https://semver.org/lang/zh-CN/)）。
+
+## [2.0.0] - 2026-09-07
+
+**轻量重写**：从"托管运行时 + 精选插件"的完整客户端，重构为只依赖**已安装 dsh** 的纯壳。保留原生窗口 + 托盘、应用菜单、右键菜单、页内查找、网页截图、窗口位置与缩放记忆、崩溃退避重启与中英双语。
+
+### Changed
+
+- 适配 dsh 0.1.2：重写 `parseDshWebUrl`，捕获完整的带 `?token=` 认证就绪地址并加载（旧实现只抠端口、丢 token，会在 0.1.2 下加载裸 `/` 被 401）；标题栏只展示 `host:port`，不泄露 token
+- dsh 定位扩展：新增全局 `npm install -g` 前缀（`npm root -g`）与 PATH 上 `dsh`/`dsh.cmd` 的定位，npx 缓存改遵 `LOCALAPPDATA`；新用户只需 `npm i -g @deepseek-ai/dsh` 即可被壳找到
+- 打包瘦身：移除 `extraResources`/`asarUnpack`/`afterPack`，`build.files` 收敛到 `main.js`/`preload.js`/`lib`/`assets`/`ui`/`package.json`
+
+### Removed
+
+- 去除托管运行时：删除 `~/.dsh/desktop-runtime` 自动安装/更新/回滚、内置 npm（`resources/npm`）、runtime seed（`resources/runtime`）、pnpm 自举（`ensurePnpm`）；壳改为仅从 desktop-runtime / profile `node_modules` / npx 缓存 / 全局前缀**定位并 spawn** 已装 dsh
+- 去除自带插件依赖：删除 `curated.json` 首启安装（dshmarket bootstrap + market API + 直装回退）、`dsh-startup-guard` 集成（`runGuardOutOfProcess` + `guard-runner.mjs` + crash/boot 标记）、`dsh-notify` 集成（protocol / `notify.ps1`/`activate.ps1` / `/dsh-notify/foreground` 上报 / `dsh-notify.json` 读取）；通知改用 Electron 原生通知，崩溃重启改为壳自身退避逻辑
+- 删除仪表盘、自更新（`make-release.mjs` / `dsh-update.json` / `update-url.json`）、诊断导出、开机自启、全局热键、UI polish 注入、离屏预览
+
+### Fixed
+
+- 修复启动即空白（"app 打不开"）：`startServer()` 是异步却在 `app.whenReady` 中漏掉 `await`，导致 dsh 就绪前就调用 `loadURL`、网页视图从未加载；改为 `await startServer()` 并固化崩溃重启后以新 token 重载视图
 
 ## [1.0.8] - 2026-09-03
 

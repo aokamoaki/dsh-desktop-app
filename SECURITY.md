@@ -31,8 +31,9 @@ You'll get an acknowledgement within a few days and updates on a fix and release
 
 ## Notes
 
-This app is an Electron shell around the DeepSeek Harness runtime (`dsh`). It
-downloads the runtime and plugins from npm/GitHub at setup time, and it verifies
-the installer's `sha512` + `size` before applying self-updates. The
-`dsh-update.json` self-update manifest is integrity-checked by the client, so a
-corrupted or tampered installer can never be applied.
+This app is a thin Electron shell around an already-installed DeepSeek Harness
+runtime (`dsh`). It locates an existing `dsh` (in `~/.dsh`, the profile
+`node_modules`, or the npx cache) and spawns it locally on loopback; the shell
+does not download, install, or update the runtime and does not ship or install
+any plugin. Remote navigation is restricted to http(s), with any other scheme
+handed off to the system browser.

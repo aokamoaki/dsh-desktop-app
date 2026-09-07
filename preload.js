@@ -1,4 +1,4 @@
-// preload for the LOCAL windows only (titlebar / splash / dashboard).
+// preload for the LOCAL windows only (titlebar / splash).
 // The remote dsh web view never gets a preload (zero IPC for remote pages).
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -8,21 +8,7 @@ contextBridge.exposeInMainWorld('dsh', {
   restart: () => ipcRenderer.invoke('server:restart'),
   openBrowser: () => ipcRenderer.invoke('app:openBrowser'),
   openLogs: () => ipcRenderer.invoke('app:openLogs'),
-  copyUrl: () => ipcRenderer.invoke('app:copyUrl'),
-  openDataDir: () => ipcRenderer.invoke('app:openDataDir'),
   getLogTail: (n) => ipcRenderer.invoke('logs:tail', n),
-  getCurrentVersion: () => ipcRenderer.invoke('dsh:current'),
-  getLatestVersion: () => ipcRenderer.invoke('dsh:latest'),
-  getVersions: () => ipcRenderer.invoke('dsh:versions'),
-  updateDsh: (v) => ipcRenderer.invoke('dsh:update', v),
-  getAutoLaunch: () => ipcRenderer.invoke('app:autoLaunch'),
-  setAutoLaunch: (on) => ipcRenderer.invoke('app:autoLaunch', !!on),
-  getNpmRegistry: () => ipcRenderer.invoke('npm:getRegistry'),
-  setNpmRegistry: (url) => ipcRenderer.invoke('npm:setRegistry', url),
-  exportDiagnostics: () => ipcRenderer.invoke('app:exportDiagnostics'),
-  checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
-  downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
-  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
   // titlebar window controls
   minimize: () => ipcRenderer.invoke('win:minimize'),
   maximize: () => ipcRenderer.invoke('win:maximize'),
